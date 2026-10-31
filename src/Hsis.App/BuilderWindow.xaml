@@ -1,0 +1,38 @@
+<Window x:Class="Hsis.App.BuilderWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="HSIS Studio">
+  <Grid Padding="36,24,36,24" RowSpacing="20">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid ColumnSpacing="16">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <TextBlock Text="HSIS Studio" Style="{StaticResource TitleTextBlockStyle}"/>
+    </Grid>
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="20" Padding="0,0,12,0">
+        <Border Padding="24" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+          <StackPanel Spacing="16">
+            <TextBlock Text="01  ソースと出力先" Style="{StaticResource SubtitleTextBlockStyle}"/>
+            <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="ScriptPath" Header="インストーラー定義ファイル" PlaceholderText=".nsi ファイルを選択"/><Button Grid.Column="1" Content="選択…" VerticalAlignment="Bottom" Click="PickScript_Click"/></Grid>
+            <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="BuildConstants" Header="ビルド定数" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" PlaceholderText="APP_VERSION=1.0.0&#xA;SOURCE_DIR=C:\path\to\app&#xA;OUTPUT_FILE=Setup.exe"/><Button Grid.Column="1" Content="定義を読み込む" VerticalAlignment="Bottom" Click="ReadDefinition_Click"/></Grid>
+            <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="OutputPath" Header="出力フォルダー"/><Button Grid.Column="1" Content="選択…" VerticalAlignment="Bottom" Click="PickOutput_Click"/></Grid>
+          </StackPanel>
+        </Border>
+        <Border Padding="24" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+          <StackPanel Spacing="16">
+            <TextBlock Text="02  セットアップの表示情報" Style="{StaticResource SubtitleTextBlockStyle}"/>
+            <Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBox x:Name="ProductName" Header="アプリ名" Text="My Application"/><TextBox x:Name="ProductVersion" Grid.Column="1" Header="バージョン" Text="1.0.0"/></Grid>
+            <TextBox x:Name="InstallPath" Header="既定のインストール先"/>
+            <TextBox x:Name="LaunchPath" Header="完了後に起動するファイル（任意）" PlaceholderText="例: VideoEditor.exe ／ インストール先からの相対パス"/>
+            <CheckBox x:Name="AdminRequired" Content="インストール時に管理者の承認を求める"/>
+          </StackPanel>
+        </Border>
+        <Border Padding="24" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+          <StackPanel Spacing="16">
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="03  利用規約" Style="{StaticResource SubtitleTextBlockStyle}"/><Button Grid.Column="1" Content="テキストを読み込む…" Click="PickLicense_Click"/></Grid>
+            <TextBox x:Name="LicenseText" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="150" MaxHeight="240" PlaceholderText="利用規約"/>
+          </StackPanel>
+        </Border>
+        <Expander Header="ビルドログ" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" IsExpanded="True"><ScrollViewer Height="160" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalScrollBarVisibility="Auto"><TextBlock x:Name="BuildLog" IsTextSelectionEnabled="True" TextWrapping="Wrap" HorizontalAlignment="Stretch" FontFamily="Cascadia Mono, Consolas"/></ScrollViewer></Expander>
+      </StackPanel>
+    </ScrollViewer>
+    <Grid Grid.Row="2" ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Spacing="4" VerticalAlignment="Center"><TextBlock x:Name="Status" Text="作成の準備ができました"/><ProgressBar x:Name="BuildProgress" Visibility="Collapsed" IsIndeterminate="True" Width="220" HorizontalAlignment="Left"/></StackPanel><Button x:Name="OpenSetup" Grid.Column="1" Content="セットアップを起動" IsEnabled="False" Click="OpenSetup_Click"/><Button x:Name="BuildButton" Grid.Column="2" Content="インストーラーを作成" Style="{StaticResource AccentButtonStyle}" Click="Build_Click"/></Grid>
+  </Grid>
+</Window>

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64</Platforms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
+    <AssemblyName Condition="'$(HsisPackageDirectory)' != ''">Setup</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
+    <ProjectReference Include="../Hsis.Core/Hsis.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(HsisPackageDirectory)' != ''">
+    <EmbeddedResource Include="$(HsisPackageDirectory)/Payload.zip" LogicalName="Hsis.Payload.zip" />
+    <EmbeddedResource Include="$(HsisPackageDirectory)/Package.json" LogicalName="Hsis.Package.json" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(HsisPackageDirectory)' == ''">
+    <Content Include="../../Directory.Build.props" Link="Template/Directory.Build.props" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Hsis.Core/*.cs;../Hsis.Core/*.csproj" Link="Template/src/Hsis.Core/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="*.cs;*.xaml;*.csproj;app.manifest" Link="Template/src/Hsis.App/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>hsis</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Hsis.Core/Hsis.Core.csproj" />
+    <Content Include="../../Directory.Build.props" Link="Template/Directory.Build.props" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Hsis.Core/*.cs;../Hsis.Core/*.csproj" Link="Template/src/Hsis.Core/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Hsis.App/*.cs;../Hsis.App/*.xaml;../Hsis.App/*.csproj;../Hsis.App/app.manifest" Link="Template/src/Hsis.App/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
