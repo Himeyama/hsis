@@ -379,6 +379,29 @@ if (OperatingSystem.IsWindowsVersionAtLeast(6, 1))
     List<string> iconLog = [];
     Check(ApplicationIcon.TryWrite(iconPlan, iconDefinition, pngPath, iconLog.Add, iconScript) && iconLog.Contains($"アプリアイコン: {projectIcon}"), "独自アイコンのない EXE には汎用アイコンではなくプロジェクトのアイコンを使う");
     byte[] png = await File.ReadAllBytesAsync(pngPath);
+    InstallPlan hsisPrepared = PackageBuilder.PreparePlan(hsis, sandbox);
+    string hsisUninstallRoot = Path.Combine(sandbox, "hsis-uninstall");
+    foreach (InstallFile file in hsisPrepared.Files)
+    {
+        string target = Path.Combine(hsisUninstallRoot, file.Destination);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.Copy(file.Source, target);
+    }
+    // Exercise the real HSIS removal plan without touching installed shortcuts or registry keys.
+    RuntimeOperations.Execute(hsisPrepared.Uninstall.Where(operation =>
+        operation.Command == "rmdir" || operation.Command == "delete"
+        && operation.Arguments[0].StartsWith("$INSTDIR", StringComparison.OrdinalIgnoreCase)),
+        hsisUninstallRoot, null, null);
+    Check(!Directory.Exists(hsisUninstallRoot), "HSIS 自身の再帰削除より先に同梱アイコンを削除しエラーなく完了する");
+    string nonRecursiveRoot = Path.Combine(sandbox, "icon-only-uninstall");
+    Directory.CreateDirectory(Path.Combine(nonRecursiveRoot, ".hsis"));
+    File.Copy(Path.Combine(sandbox, "Application.ico"), Path.Combine(nonRecursiveRoot, @".hsis\Application.ico"));
+    InstallPlan nonRecursivePlan = PackageBuilder.PreparePlan(hsis with
+    {
+        Uninstall = [new("rmdir", ["$INSTDIR"])]
+    }, sandbox);
+    RuntimeOperations.Execute(nonRecursivePlan.Uninstall, nonRecursiveRoot, null, null);
+    Check(!Directory.Exists(nonRecursiveRoot), "非再帰のインストール先削除でも同梱アイコンの後片付けが妨げない");
     Check(png.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }), "アイコンを表示用の PNG として保存");
     using (System.Drawing.Bitmap decodedIcon = new(pngPath))
         Check(decodedIcon.Width == 256 && decodedIcon.Height == 256 && decodedIcon.GetPixel(128, 128).G == 255 && decodedIcon.GetPixel(128, 128).R == 0,

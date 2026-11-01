@@ -110,8 +110,9 @@ public sealed class PackageBuilder
                 && operation.Arguments[2].Equals("DisplayName", StringComparison.OrdinalIgnoreCase)).ToArray();
             foreach (ScriptOperation registration in registrations)
                 install.Add(new("writeregstr", [registration.Arguments[0], registration.Arguments[1], "DisplayIcon", @"$INSTDIR\" + relative]));
-            remove.Add(new("delete", [@"$INSTDIR\" + relative]));
-            remove.Add(new("rmdir", [@"$INSTDIR\.hsis"]));
+            // The script may remove $INSTDIR itself; clean up our icon before it does.
+            remove.InsertRange(0, [new("delete", [@"$INSTDIR\" + relative]),
+                new("rmdir", [@"$INSTDIR\.hsis"])]);
         }
         if (definition.Uninstaller.Length == 0)
         {
