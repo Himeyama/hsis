@@ -152,6 +152,8 @@ v0.4.4 では CLI の `Template` に `Hsis.ico` が含まれないため、同�
 
 出力先の `Setup-日時-識別子` フォルダーに実行ファイルを生成します。ファイル名は定義の `OutFile` から取得します。`OutFile` のディレクトリ部分は使わず、出力先は GUI / CLI の指定に従います。ランタイムを同梱するため、インストール先では SDK は不要です。付随ファイルがある場合は出力フォルダーごと配布してください。
 
+セットアップとアンインストーラーに同梱するランタイムは、単一 EXE の圧縮を有効にしています。起動時に展開するため、容量削減と引き換えに起動処理が増える場合があります。
+
 アプリ本体の圧縮データとアンインストーラーは EXE の末尾に同梱し、画面起動時の .NET 一時展開から外しています。インストールを開始した時点で必要なデータだけを読み取ります。アンインストーラーにはインストール用のアプリ本体を重複して含めません。
 
 Studio / CLI の `Template` フォルダーは生成時に必要です。実行ファイルと一緒に保持してください。
@@ -164,7 +166,7 @@ Studio / CLI の `Template` フォルダーは生成時に必要です。実行�
 - `Name`、`OutFile`、`InstallDir`、`LicenseData`、`Unicode true`
 - `RequestExecutionLevel user` / `admin`、`InstallDirRegKey`
 - `VIProductVersion`、`VIAddVersionKey`（ProductName / FileDescription / FileVersion / LegalCopyright）
-- `SetCompressor /SOLID lzma` は HSIS の ZIP 最適圧縮に対応付けます。LZMA 形式の生成ではありません。
+- `SetCompressor /SOLID lzma` は HSIS の ZIP 最小サイズ優先圧縮に対応付けます。LZMA 形式の生成ではありません。
 - 通常の必須 `Section` / `SectionEnd`
 - `SetOutPath`、`CreateDirectory`（`$INSTDIR` 以下）
 - `File`、ワイルドカード、`/r`、単一ファイルの `/oname=`

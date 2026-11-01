@@ -157,7 +157,7 @@ public sealed class PackageBuilder
             cancellationToken.ThrowIfCancellationRequested();
             InstallFile file = plan.Files[index];
             string entryName = $"files/{index}";
-            ZipArchiveEntry entry = archive.CreateEntry(entryName, CompressionLevel.Optimal);
+            ZipArchiveEntry entry = archive.CreateEntry(entryName, CompressionLevel.SmallestSize);
             await using (Stream entryStream = entry.Open())
             await using (FileStream input = File.OpenRead(file.Source))
                 await input.CopyToAsync(entryStream, cancellationToken).ConfigureAwait(false);
