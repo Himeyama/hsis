@@ -55,6 +55,23 @@ try
 finally { Console.OutputEncoding = originalEncoding; }
 Check(childLog.Contains("標準出力：日本語のビルドログ ✓") && childLog.Contains("標準エラー：日本語の診断ログ ✓"), "親プロセスが Shift-JIS でも子プロセスの UTF-8 ログを正しく読み取る");
 DefinitionCompiler compiler = new();
+string hsisSource = Path.Combine(sandbox, "hsis-source");
+Directory.CreateDirectory(hsisSource);
+await File.WriteAllTextAsync(Path.Combine(hsisSource, "Hsis.App.exe"), "test payload");
+InstallPlan hsis = compiler.Compile(Path.Combine(root, "installer", "HSIS.nsi"),
+    new Dictionary<string, string> { ["APP_VERSION"] = "1.2.3", ["SOURCE_DIR"] = hsisSource });
+string hsisRegistration = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\HSIS";
+Check(hsis.Install.Any(operation => operation.Command == "writeregstr"
+    && operation.Arguments.SequenceEqual(new[] { "HKCU", hsisRegistration, "DisplayName", "HSIS" }))
+    && hsis.Install.Any(operation => operation.Command == "writeregstr"
+        && operation.Arguments.SequenceEqual(new[] { "HKCU", hsisRegistration, "DisplayVersion", "1.2.3" })),
+    "HSIS 自身を Windows のインストール済みアプリに登録する");
+Check(hsis.Definition.Uninstaller == "Uninstall.exe"
+    && hsis.Install.Any(operation => operation.Command == "writeregstr"
+        && operation.Arguments.SequenceEqual(new[] { "HKCU", hsisRegistration, "UninstallString", "\"$INSTDIR\\Uninstall.exe\"" }))
+    && hsis.Uninstall.Any(operation => operation.Command == "deleteregkey"
+        && operation.Arguments.SequenceEqual(new[] { "HKCU", hsisRegistration })),
+    "HSIS のアンインストールコマンドを引用符付きで登録し削除時に登録解除する");
 InstallPlan sample = compiler.Compile(Path.Combine(root, "samples", "HelloApp", "installer.nsi"));
 Check(sample.Definition.Name == "Hello App" && sample.Definition.License.Contains("サンプル利用規約"), "定義から表示情報・規約を読み取る");
 Check(sample.Files.Count == 2 && !sample.Definition.RequiresAdministrator, "File と権限を読み取る");

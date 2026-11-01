@@ -57,6 +57,56 @@ Copy-Item src/Hsis.App/Hsis.ico artifacts/cli/Template/src/Hsis.App/Hsis.ico
 .\artifacts\cli\hsis.exe build .\samples\HelloApp\installer.nsi
 ```
 
+## Windows のアプリ一覧に表示する .nsi の例
+
+`Uninstall.exe` の自動生成だけでは、Windows の「設定 → アプリ → インストールされているアプリ」には登録されません。次のように `WriteRegStr` で登録し、`Section "Uninstall"` で登録を解除します。明示的な削除セクションを書く場合は、配置ファイルとショートカットの削除も指定してください。
+
+次を `installer/MyApp.nsi` として保存します。`SOURCE_DIR` には発行済みアプリのフォルダーを指定し、`MyApp.exe` は実際の実行ファイル名に置き換えます。
+
+```nsi
+Unicode true
+!include "MUI2.nsh"
+Name "MyApp"
+OutFile "MyApp-${APP_VERSION}-Setup.exe"
+InstallDir "$LOCALAPPDATA\Programs\MyApp"
+RequestExecutionLevel user
+VIProductVersion "${APP_VERSION}.0"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\app\MyApp.exe"
+!insertmacro MUI_PAGE_WELCOME
+!insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_PAGE_FINISH
+!insertmacro MUI_LANGUAGE "Japanese"
+
+Section "MyApp"
+  SetOutPath "$INSTDIR\app"
+  File /r "${SOURCE_DIR}\*"
+  CreateShortcut "$SMPROGRAMS\MyApp.lnk" "$INSTDIR\app\MyApp.exe"
+  WriteUninstaller "$INSTDIR\Uninstall.exe"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyApp" "DisplayName" "MyApp"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyApp" "DisplayVersion" "${APP_VERSION}"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyApp" "DisplayIcon" "$INSTDIR\app\MyApp.exe"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyApp" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyApp" "QuietUninstallString" '$\"$INSTDIR\Uninstall.exe$\" /S'
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyApp" "NoModify" 1
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyApp" "NoRepair" 1
+SectionEnd
+
+Section "Uninstall"
+  Delete "$SMPROGRAMS\MyApp.lnk"
+  RMDir /r "$INSTDIR\app"
+  Delete "$INSTDIR\Uninstall.exe"
+  RMDir "$INSTDIR"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyApp"
+SectionEnd
+```
+
+```powershell
+.\hsis.cmd build .\installer\MyApp.nsi '-DAPP_VERSION=0.1.0' '-DSOURCE_DIR=C:\path\to\publish'
+```
+
+この例は実行ユーザー用に `HKCU` へ登録します。空白を含むインストール先でも削除できるよう、アンインストールコマンドの EXE パスを引用符で囲んでいます。`RMDir /r` は指定フォルダー内をすべて削除するため、ユーザーデータは `app` フォルダーの外に保存してください。HSIS 自身の定義は [installer/HSIS.nsi](installer/HSIS.nsi) を参照してください。
+
 ## HSIS 自身のインストーラーをダウンロードする
 
 バージョンタグ (`vMAJOR.MINOR.PATCH`) を push すると、HSIS 自身でインストーラーをビルドし、GitHub Release にセットアップ EXE と `.sha256` を公開します。このリポジトリの **Releases** からダウンロードしてください。
