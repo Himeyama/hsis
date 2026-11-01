@@ -32,6 +32,9 @@ public sealed class PackageBuilder
             await File.WriteAllTextAsync(Path.Combine(work, "Package.json"), JsonSerializer.Serialize(definition), cancellationToken).ConfigureAwait(false);
             string project = Path.Combine(work, "Source");
             CopyDirectory(template, project);
+            string applicationIcon = Path.Combine(work, "Application.ico");
+            if (File.Exists(applicationIcon))
+                File.Copy(applicationIcon, Path.Combine(project, "src", "Hsis.App", "Hsis.ico"), true);
             string manifestPath = Path.Combine(project, "src", "Hsis.App", "app.manifest");
             XDocument manifest = XDocument.Load(manifestPath);
             XElement requestedLevel = manifest.Descendants(XName.Get("requestedExecutionLevel", "urn:schemas-microsoft-com:asm.v3")).Single();

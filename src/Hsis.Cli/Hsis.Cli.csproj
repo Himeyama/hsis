@@ -8,6 +8,6 @@
     <ProjectReference Include="../Hsis.Core/Hsis.Core.csproj" />
     <Content Include="../../Directory.Build.props" Link="Template/Directory.Build.props" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../Hsis.Core/*.cs;../Hsis.Core/*.csproj" Link="Template/src/Hsis.Core/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../Hsis.App/*.cs;../Hsis.App/*.xaml;../Hsis.App/*.csproj;../Hsis.App/app.manifest" Link="Template/src/Hsis.App/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Hsis.App/*.cs;../Hsis.App/*.xaml;../Hsis.App/*.csproj;../Hsis.App/app.manifest;../Hsis.App/Hsis.ico" Link="Template/src/Hsis.App/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
