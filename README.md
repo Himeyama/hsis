@@ -1,6 +1,6 @@
 # HSIS
 
-現在のバージョン: **0.4.1**。運用ルールは `AGENTS.md`、変更履歴は `CHANGELOG.md` を参照してください。
+現在のバージョン: **0.4.4**。運用ルールは `AGENTS.md`、変更履歴は `CHANGELOG.md` を参照してください。
 
 `WriteUninstaller` がない定義にも `Uninstall.exe` を自動生成します。削除定義がない場合、配置ファイルとショートカットを削除し、ユーザーが追加したファイルは残します。レジストリなどの削除は `Section Uninstall` で指定してください。取得した対象アプリのアイコンは `.hsis/Application.ico` に配置し、アプリのショートカットから参照します。
 
@@ -52,8 +52,95 @@ dotnet restore src/Hsis.App/Hsis.App.csproj -p:Platform=x64 -p:NuGetAudit=true -
 
 ```powershell
 dotnet publish src/Hsis.Cli/Hsis.Cli.csproj -c Release -r win-x64 --self-contained true -o artifacts/cli
+# v0.4.4 の CLI テンプレートに元のアイコンを補います。
+Copy-Item src/Hsis.App/Hsis.ico artifacts/cli/Template/src/Hsis.App/Hsis.ico
 .\artifacts\cli\hsis.exe build .\samples\HelloApp\installer.nsi
 ```
+
+## GitHub Actions で使用する
+
+VideoEditor で確認した、HSIS **v0.4.4** を使用する例です。アプリと HSIS を別々のフォルダーへチェックアウトし、CLI をビルドして既存の `.nsi` からインストーラーを生成します。NSIS のインストールは不要です。
+
+次の例を対象アプリの `.github/workflows/installer.yml` に保存します。アプリ側に `build.ps1` と `installer/VideoEditor.nsi` があることを前提としています。別のアプリでは、アプリの発行コマンド、定義ファイル名、出力ファイル名を変更してください。`build.ps1` は VideoEditor の発行スクリプトで、HSIS に含まれるものではありません。
+
+```yaml
+name: Build installer with HSIS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Application version (MAJOR.MINOR.PATCH)'
+        required: true
+        default: '0.5.1'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+      - name: Check out HSIS v0.4.4
+        uses: actions/checkout@v4
+        with:
+          repository: Himeyama/hsis
+          ref: v0.4.4
+          path: hsis
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Validate application version
+        env:
+          APP_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:APP_VERSION -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Expected MAJOR.MINOR.PATCH' }
+          if (($env:APP_VERSION.Split('.') | Where-Object { [long]$_ -gt 65535 }).Count) { throw 'Version components must be at most 65535' }
+      - name: Publish application
+        env:
+          APP_VERSION: ${{ inputs.version }}
+        run: |
+          ./build.ps1 -Configuration Release -Publish -Version $env:APP_VERSION -OutputDirectory "$env:RUNNER_TEMP/payload" -SkipLaunch
+          if ($LASTEXITCODE -ne 0) { throw 'Application publish failed' }
+      - name: Build HSIS CLI
+        run: |
+          $toolPath = Join-Path $env:RUNNER_TEMP 'hsis-v0.4.4'
+          dotnet publish ../hsis/src/Hsis.Cli/Hsis.Cli.csproj -c Release -r win-x64 --self-contained true -o $toolPath
+          if ($LASTEXITCODE -ne 0) { throw 'HSIS build failed' }
+          # v0.4.4 omits the icon from the CLI template; copy the original asset.
+          Copy-Item ../hsis/src/Hsis.App/Hsis.ico "$toolPath/Template/src/Hsis.App/Hsis.ico"
+          "HSIS_PATH=$(Join-Path $toolPath 'hsis.exe')" >> $env:GITHUB_ENV
+      - name: Build installer and checksum
+        env:
+          APP_VERSION: ${{ inputs.version }}
+        run: |
+          & $env:HSIS_PATH build ./installer/VideoEditor.nsi --output ./artifacts/installer "-DAPP_VERSION=$env:APP_VERSION" "-DSOURCE_DIR=$env:RUNNER_TEMP/payload" "-DOUTPUT_FILE=VideoEditor-$env:APP_VERSION-win-x64-Setup.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'HSIS failed' }
+          $installers = @(Get-ChildItem ./artifacts/installer/Setup-*/*-Setup.exe)
+          if ($installers.Count -ne 1) { throw 'Expected one installer' }
+          $installer = $installers[0]
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Set-Content -LiteralPath "$($installer.FullName).sha256" -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VideoEditor-${{ inputs.version }}-win-x64
+          path: app/artifacts/installer/
+          if-no-files-found: error
+```
+
+`APP_VERSION`、`SOURCE_DIR`、`OUTPUT_FILE` は、この例の `.nsi` が使用するビルド定数です。HSIS 固有の必須定数ではありません。アプリのバージョンは入力値から設定し、使用する HSIS のバージョンは `ref: v0.4.4` で固定します。
+
+v0.4.4 では CLI の `Template` に `Hsis.ico` が含まれないため、同じタグの元アセットをコピーしています。`hsis.exe` と `Template` は一緒に保持してください。生成物は `artifacts/installer/Setup-日時-識別子/` に保存されます。生成した EXE の名前は変更せず、出力フォルダーごと配布してください。
+
+この例は手動実行で Artifacts に保存します。GitHub Release へ公開する場合は、タグ起動の条件と公開ステップを追加し、そのジョブに `contents: write` を設定してください。
 
 ## GUI
 
