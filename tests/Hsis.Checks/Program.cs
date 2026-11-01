@@ -57,6 +57,45 @@ Check(!File.Exists(Path.Combine(automaticRoot, "hello.txt")) && !File.Exists(Pat
     && File.Exists(Path.Combine(automaticRoot, "user-data.txt")), "自動アンインストールは配置ファイルを削除しユーザーデータを残す");
 string payload = Path.Combine(sandbox, "Payload.zip");
 await PackageBuilder.CreatePayloadAsync(sample, payload, Console.WriteLine);
+if (OperatingSystem.IsWindows())
+{
+    string busyRoot = Path.Combine(sandbox, "busy-install");
+    Directory.CreateDirectory(busyRoot);
+    string busyExecutable = Path.Combine(busyRoot, "BusyApp.exe");
+    File.Copy(Path.Combine(Environment.SystemDirectory, "cmd.exe"), busyExecutable);
+    string sentinel = Path.Combine(busyRoot, "keep.txt");
+    await File.WriteAllTextAsync(sentinel, "unchanged");
+    string existingFile = Path.Combine(busyRoot, "hello.txt");
+    await File.WriteAllTextAsync(existingFile, "original");
+    System.Diagnostics.ProcessStartInfo start = new(busyExecutable)
+    {
+        UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true
+    };
+    using System.Diagnostics.Process busy = System.Diagnostics.Process.Start(start)!;
+    try
+    {
+        Check(!busy.WaitForExit(300), "起動中アプリのテストプロセスを維持");
+        foreach (bool uninstall in new[] { false, true })
+        {
+            bool blocked = false;
+            await using FileStream data = File.OpenRead(automaticPayload);
+            try
+            {
+                if (uninstall) await InstallationEngine.UninstallAsync(data, busyRoot);
+                else await InstallationEngine.InstallAsync(data, busyRoot);
+            }
+            catch (ApplicationsInUseException ex)
+            {
+                blocked = ex.Message.Contains("BusyApp.exe") && ex.Message.Contains("終了してから");
+            }
+            Check(blocked && File.Exists(sentinel) && await File.ReadAllTextAsync(existingFile) == "original",
+                uninstall ? "起動中は削除前に終了を案内" : "起動中は配置前に終了を案内");
+        }
+    }
+    finally { if (!busy.HasExited) { busy.Kill(); busy.WaitForExit(); } }
+    RunningApplications.EnsureClosed(busyRoot);
+    Check(File.Exists(sentinel), "終了後は再実行できる");
+}
 string overlayExecutable = Path.Combine(sandbox, "OverlaySetup.exe");
 string uninstallData = Path.Combine(sandbox, "UninstallerData.exe");
 byte[] hostPrefix = "HSIS test executable prefix"u8.ToArray();

@@ -14,6 +14,7 @@ public static class InstallationEngine
         PayloadManifest manifest = await JsonSerializer.DeserializeAsync<PayloadManifest>(manifestStream, cancellationToken: cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidDataException("配置情報が不正です。");
         RuntimeOperations.CheckRequirements(manifest.Initialize);
+        RunningApplications.EnsureClosed(root);
         List<(ZipArchiveEntry Entry, string Target)> files = manifest.Files.Select(file =>
             (archive.GetEntry(file.Entry) ?? throw new InvalidDataException($"ファイルがありません: {file.Entry}"), Resolve(root, file.Destination))).ToList();
         List<string> directories = manifest.Directories.Select(directory => Resolve(root, directory)).ToList();
@@ -37,7 +38,9 @@ public static class InstallationEngine
         using ZipArchive archive = new(payload, ZipArchiveMode.Read, true);
         await using Stream metadata = (archive.GetEntry("manifest.json") ?? throw new InvalidDataException("配置情報がありません。")).Open();
         PayloadManifest manifest = await JsonSerializer.DeserializeAsync<PayloadManifest>(metadata).ConfigureAwait(false) ?? throw new InvalidDataException("配置情報が不正です。");
-        RuntimeOperations.Execute(manifest.Uninstall, Path.GetFullPath(destination), null, progress);
+        string root = Path.GetFullPath(destination);
+        RunningApplications.EnsureClosed(root);
+        RuntimeOperations.Execute(manifest.Uninstall, root, null, progress);
     }
 
     private static string Resolve(string root, string relative)

@@ -155,6 +155,7 @@ public sealed partial class InstallerWindow : Window
             _installedDirectory = Path.GetFullPath(destination);
             _page = 4;
         }
+        catch (ApplicationsInUseException ex) { _page = _uninstallDirectory is null ? 2 : 0; ShowError(ex.Message); }
         catch (Exception ex) { _page = _uninstallDirectory is null ? 2 : 0; ShowError(ex.Message + " 一部の変更が適用済みの場合があります。"); }
         finally
         {
