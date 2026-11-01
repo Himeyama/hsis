@@ -73,7 +73,7 @@ ZIP を展開して `HSIS-バージョン-win-x64-Setup.exe` を起動します�
 
 Studio と CLI を発行し、その CLI が `installer/HSIS.nsi` を処理して **HSIS で HSIS 自身のインストーラーを生成**します。完成した EXE と SHA-256 は `artifacts/distribution/` に保存します。インストール後の Studio / CLI で別のインストーラーを生成する場合も、.NET SDK、C++ ビルドツール、対応する Windows 標準 `tar.exe`、NuGet 接続が必要です。
 
-標準 `tar.exe` が LZMA2 の圧縮に対応しない環境では、`$env:HSIS_7ZIP_PATH = 'C:\Program Files\7-Zip\7z.exe'` を設定すると、圧縮に 7-Zip を使用します。展開には引き続き Windows 標準 `tar.exe` を使います。このリポジトリの workflow もこの設定でビルドします。
+標準 `tar.exe` が LZMA2 に対応しない環境では、`$env:HSIS_7ZIP_PATH = 'C:\Program Files\7-Zip\7z.exe'` を設定すると、圧縮と展開に 7-Zip を使用します。このリポジトリの workflow もこの設定でビルドします。生成したセットアップのネイティブ起動処理は Windows 標準 `tar.exe` を使用するため、配布対象には LZMA2 の展開に対応した Windows が必要です。
 
 ## GitHub Actions で使用する
 
