@@ -57,6 +57,24 @@ Copy-Item src/Hsis.App/Hsis.ico artifacts/cli/Template/src/Hsis.App/Hsis.ico
 .\artifacts\cli\hsis.exe build .\samples\HelloApp\installer.nsi
 ```
 
+## HSIS 自身のインストーラーをダウンロードする
+
+このリポジトリの **Actions → Build HSIS installer → Run workflow** から実行します。完了後、実行結果の **Artifacts → HSIS-バージョン-win-x64**、または Summary のダウンロードリンクから ZIP を取得してください。成果物の保存期間は30日です。
+
+ZIP を展開して `HSIS-バージョン-win-x64-Setup.exe` を起動します。同梱の `.sha256` で SHA-256 を確認できます。セットアップのファイル名は変更しないでください。既定ではユーザーの `LocalAppData\Programs\HSIS` に Studio、CLI (`hsis.exe`)、生成に必要な `Template` を配置し、スタートメニューに HSIS を追加します。アンインストールは配置先の `Uninstall.exe` から実行できます。
+
+ワークフローは `v*` タグの push でも実行します。タグと `Directory.Build.props` のバージョンが一致しない場合は失敗します。バージョンは入力値で上書きせず、同ファイルを使用します。GitHub Release への公開は行いません。
+
+ローカルでも、前述の生成環境で次を実行できます。
+
+```powershell
+./build-installer.ps1
+```
+
+Studio と CLI を発行し、その CLI が `installer/HSIS.nsi` を処理して **HSIS で HSIS 自身のインストーラーを生成**します。完成した EXE と SHA-256 は `artifacts/distribution/` に保存します。インストール後の Studio / CLI で別のインストーラーを生成する場合も、.NET SDK、C++ ビルドツール、対応する Windows 標準 `tar.exe`、NuGet 接続が必要です。
+
+標準 `tar.exe` が LZMA2 の圧縮に対応しない環境では、`$env:HSIS_7ZIP_PATH = 'C:\Program Files\7-Zip\7z.exe'` を設定すると、圧縮に 7-Zip を使用します。展開には引き続き Windows 標準 `tar.exe` を使います。このリポジトリの workflow もこの設定でビルドします。
+
 ## GitHub Actions で使用する
 
 VideoEditor で確認した、HSIS **v0.4.4** を使用する例です。アプリと HSIS を別々のフォルダーへチェックアウトし、CLI をビルドして既存の `.nsi` からインストーラーを生成します。NSIS のインストールは不要です。

@@ -1,0 +1,57 @@
+name: Build HSIS installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Check release version
+        run: |
+          [xml]$props = Get-Content ./Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.Version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -cne "v$version") {
+            throw "Tag must match Directory.Build.props: v$version"
+          }
+          "HSIS_VERSION=$version" >> $env:GITHUB_ENV
+      - name: Run checks
+        run: |
+          $sevenZip = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
+          if (-not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) { throw '7-Zip is required for LZMA2 compression on this runner' }
+          $env:HSIS_7ZIP_PATH = $sevenZip
+          "HSIS_7ZIP_PATH=$sevenZip" >> $env:GITHUB_ENV
+          dotnet run --project tests/Hsis.Checks -c Release -- .
+          if ($LASTEXITCODE -ne 0) { throw 'HSIS checks failed' }
+      - name: Build HSIS with HSIS
+        run: ./build-installer.ps1
+      - name: Upload installer and checksum
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: HSIS-${{ env.HSIS_VERSION }}-win-x64
+          path: artifacts/distribution/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+      - name: Add download link
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          "[Download HSIS $env:HSIS_VERSION installer]($env:ARTIFACT_URL)" >> $env:GITHUB_STEP_SUMMARY
