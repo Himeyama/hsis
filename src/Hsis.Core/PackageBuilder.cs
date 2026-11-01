@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.IO.Compression;
 using System.Xml.Linq;
 
 namespace Hsis.Core;
@@ -27,7 +26,7 @@ public sealed class PackageBuilder
             ApplicationIcon.TryWrite(plan, definition, icon, log, script);
             plan = PreparePlan(plan with { Definition = definition }, work);
             definition = plan.Definition;
-            string payload = Path.Combine(work, "Payload.zip");
+            string payload = Path.Combine(work, "Payload.bin");
             await CreatePayloadAsync(plan, payload, log, cancellationToken).ConfigureAwait(false);
             await File.WriteAllTextAsync(Path.Combine(work, "Package.json"), JsonSerializer.Serialize(definition), cancellationToken).ConfigureAwait(false);
             string project = Path.Combine(work, "Source");
@@ -48,36 +47,24 @@ public sealed class PackageBuilder
                 new XElement("Copyright", definition.VersionKeys.GetValueOrDefault("LegalCopyright", "")));
             projectXml.Root!.Add(properties);
             projectXml.Save(projectFile);
-            bool hasUninstaller = definition.Uninstaller.Length > 0;
-            if (hasUninstaller)
-            {
-                InstallPlan uninstallPlan = plan with { Files = [], Directories = [], Install = [] };
-                await CreatePayloadAsync(uninstallPlan, Path.Combine(work, "UninstallerPayload.zip"), log, cancellationToken).ConfigureAwait(false);
-                string uninstallName = Path.GetFileNameWithoutExtension(definition.Uninstaller);
-                string uninstallSource = Path.Combine(work, "UninstallerSource");
-                CopyDirectory(project, uninstallSource);
-                string uninstallStaging = Path.Combine(work, "UninstallerPublished");
-                log("アンインストーラーを生成しています…");
-                await PublishAsync(Path.Combine(uninstallSource, "src", "Hsis.App", "Hsis.App.csproj"), uninstallStaging, uninstallName, true, false).ConfigureAwait(false);
-                File.Copy(Path.Combine(uninstallStaging, uninstallName + ".exe"), Path.Combine(work, "Uninstaller.exe"));
-            }
+            InstallPlan uninstallPlan = plan with { Files = [], Directories = [], Install = [] };
+            await CreatePayloadAsync(uninstallPlan, Path.Combine(work, "UninstallerPayload.bin"), log, cancellationToken).ConfigureAwait(false);
             string staging = Path.Combine(work, "Published");
-            log("セットアップを生成しています。初回は依存ファイルの取得に時間がかかります…");
-            await PublishAsync(projectFile, staging, Path.GetFileNameWithoutExtension(outputName), false, hasUninstaller).ConfigureAwait(false);
-            async Task PublishAsync(string sourceProject, string publishDirectory, string name, bool uninstall, bool embedUninstaller)
-            {
-                // The final executable name must be used at compilation. Renaming a WinUI
-                // single-file executable afterwards breaks its resource-map lookup at startup.
-                await ProcessRunner.RunAsync("dotnet", ["publish", sourceProject, "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", publishDirectory,
-                    "-p:PublishSingleFile=true", $"-p:HsisPackageDirectory={work}", $"-p:HsisOutputName={name}", $"-p:HsisUninstaller={uninstall}", $"-p:HsisHasUninstaller={embedUninstaller}"],
-                    Path.GetDirectoryName(sourceProject)!, log, cancellationToken).ConfigureAwait(false);
-            }
+            log("共通のセットアップ画面とランタイムを生成しています…");
+            // One UI/runtime serves both modes. Keep the compiled WinUI filename intact.
+            await ProcessRunner.RunAsync("dotnet", ["publish", projectFile, "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", staging,
+                "-p:PublishSingleFile=false", $"-p:HsisPackageDirectory={work}", "-p:HsisOutputName=Hsis.Setup"],
+                Path.GetDirectoryName(projectFile)!, log, cancellationToken).ConfigureAwait(false);
+            string runtime = Path.Combine(work, "Runtime.7z");
+            log("共通ランタイムを 7z / LZMA2（高圧縮）で圧縮しています…");
+            await SevenZip.CreateAsync(staging, runtime, log, cancellationToken).ConfigureAwait(false);
+            string launcher = await NativeLauncher.BuildAsync(project, work, log, cancellationToken).ConfigureAwait(false);
             string destination = Path.Combine(Path.GetFullPath(output), $"Setup-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..6]}");
             Directory.CreateDirectory(destination);
-            CopyDirectory(staging, destination);
             string setup = Path.Combine(destination, outputName);
-            if (!File.Exists(setup)) throw new InvalidOperationException($"{outputName} が生成されませんでした。");
-            await SetupArchive.AppendAsync(setup, payload, hasUninstaller ? Path.Combine(work, "Uninstaller.exe") : null, cancellationToken).ConfigureAwait(false);
+            File.Copy(launcher, setup);
+            int depth = (Path.GetDirectoryName(definition.Uninstaller) ?? "").Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries).Length;
+            await SetupArchive.AppendNativeAsync(setup, runtime, payload, depth, cancellationToken).ConfigureAwait(false);
             log($"作成完了: {setup}");
             return setup;
         }
@@ -152,24 +139,43 @@ public sealed class PackageBuilder
 
     public static async Task CreatePayloadAsync(InstallPlan plan, string output, Action<string> log, CancellationToken cancellationToken = default)
     {
-        await using FileStream stream = File.Create(output);
-        using ZipArchive archive = new(stream, ZipArchiveMode.Create, true);
-        List<PayloadFile> files = [];
-        for (int index = 0; index < plan.Files.Count; index++)
+        string staging = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(staging, "files"));
+        string compressed = staging + ".7z";
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            InstallFile file = plan.Files[index];
-            string entryName = $"files/{index}";
-            ZipArchiveEntry entry = archive.CreateEntry(entryName, CompressionLevel.SmallestSize);
-            await using (Stream entryStream = entry.Open())
-            await using (FileStream input = File.OpenRead(file.Source))
-                await input.CopyToAsync(entryStream, cancellationToken).ConfigureAwait(false);
-            files.Add(new(entryName, file.Destination));
-            log($"追加: {file.Source}");
+            List<PayloadFile> files = [];
+            for (int index = 0; index < plan.Files.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                InstallFile file = plan.Files[index];
+                string entry = $"files/{index}";
+                await using (FileStream input = File.OpenRead(file.Source))
+                await using (FileStream target = File.Create(Path.Combine(staging, entry)))
+                    await input.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+                files.Add(new(entry, file.Destination));
+                log($"追加: {file.Source}");
+            }
+            byte[] metadata = JsonSerializer.SerializeToUtf8Bytes(new PayloadManifest(files, plan.Directories)
+                { Initialize = plan.Initialize, Install = plan.Install, Uninstall = plan.Uninstall });
+            if (files.Count > 0)
+            {
+                log("7z / LZMA2（高圧縮）で圧縮しています…");
+                await SevenZip.CreateAsync(staging, compressed, log, cancellationToken).ConfigureAwait(false);
+            }
+            await using FileStream stream = File.Create(output);
+            await stream.WriteAsync(PayloadArchive.Magic.ToArray(), cancellationToken).ConfigureAwait(false);
+            byte[] length = new byte[4];
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(length, metadata.Length);
+            await stream.WriteAsync(length, cancellationToken).ConfigureAwait(false);
+            await stream.WriteAsync(metadata, cancellationToken).ConfigureAwait(false);
+            if (files.Count > 0)
+            {
+                await using FileStream input = File.OpenRead(compressed);
+                await input.CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
+            }
         }
-        ZipArchiveEntry metadata = archive.CreateEntry("manifest.json");
-        await using Stream metadataStream = metadata.Open();
-        await JsonSerializer.SerializeAsync(metadataStream, new PayloadManifest(files, plan.Directories) { Initialize = plan.Initialize, Install = plan.Install, Uninstall = plan.Uninstall }, cancellationToken: cancellationToken).ConfigureAwait(false);
+        finally { Directory.Delete(staging, true); if (File.Exists(compressed)) File.Delete(compressed); }
     }
 
     private static void CopyDirectory(string source, string destination)

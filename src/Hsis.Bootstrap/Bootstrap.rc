@@ -1,0 +1,5 @@
+1 ICON "Application.ico"
+1 24 "app.manifest"
+101 RCDATA "Fonts/NotoSansJP-Regular.ttf"
+102 RCDATA "Fonts/NotoSansJP-SemiBold.ttf"
+103 RCDATA "Fonts/OFL.txt"

@@ -17,6 +17,22 @@ if (args is ["--extract-uninstaller", string setupExecutable, string destination
     await resource.CopyToAsync(destinationFile);
     return;
 }
+if (args is ["--exercise-generated-setup", string generatedSetup])
+{
+    string installRoot = Path.Combine(Path.GetFullPath("."), "artifacts", "sevenzip-install-check", Guid.NewGuid().ToString("N"));
+    using (Stream data = SetupArchive.OpenPayload(generatedSetup))
+    using (Stream? uninstaller = SetupArchive.OpenUninstaller(generatedSetup))
+        await InstallationEngine.InstallAsync(data, installRoot, new InlineProgress(Console.WriteLine), uninstaller: uninstaller);
+    Check(File.Exists(Path.Combine(installRoot, "hello.txt")), "生成済み 7z EXE からサンプルを配置");
+    System.Diagnostics.ProcessStartInfo start = new(Path.Combine(installRoot, "Uninstall.exe")) { UseShellExecute = false, WorkingDirectory = installRoot };
+    start.ArgumentList.Add("/S");
+    using System.Diagnostics.Process launcher = System.Diagnostics.Process.Start(start)!;
+    await launcher.WaitForExitAsync();
+    System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+    while (Directory.Exists(installRoot) && watch.Elapsed.TotalSeconds < 60) await Task.Delay(100);
+    Check(!Directory.Exists(installRoot), "ネイティブ起動から無人アンインストールし自身も削除");
+    return;
+}
 if (args is ["--extract-icon", string executablePath, string scriptPath, string iconOutput])
 {
     PackageDefinition definition = new() { Name = Path.GetFileNameWithoutExtension(executablePath), LaunchExecutable = Path.GetFileName(executablePath) };
@@ -57,6 +73,36 @@ Check(!File.Exists(Path.Combine(automaticRoot, "hello.txt")) && !File.Exists(Pat
     && File.Exists(Path.Combine(automaticRoot, "user-data.txt")), "自動アンインストールは配置ファイルを削除しユーザーデータを残す");
 string payload = Path.Combine(sandbox, "Payload.zip");
 await PackageBuilder.CreatePayloadAsync(sample, payload, Console.WriteLine);
+byte[] payloadHeader = new byte[8];
+await using (FileStream source = File.OpenRead(payload)) await source.ReadExactlyAsync(payloadHeader);
+Check(payloadHeader.AsSpan().SequenceEqual("HSIS7Z01"u8), "新規パッケージは 7z / LZMA2 用の形式");
+List<string> extractionMessages = [];
+await using (FileStream source = File.OpenRead(payload))
+    await InstallationEngine.InstallAsync(source, Path.Combine(sandbox, "sevenzip-progress"), new InlineProgress(extractionMessages.Add));
+Check(extractionMessages.Any(message => message.Contains("展開しています")), "展開待ちの案内を通知");
+string legacyPayload = Path.Combine(sandbox, "Legacy.zip");
+using (System.IO.Compression.ZipArchive legacy = new(File.Create(legacyPayload), System.IO.Compression.ZipArchiveMode.Create))
+{
+    using StreamWriter manifestWriter = new(legacy.CreateEntry("manifest.json").Open());
+    manifestWriter.Write(System.Text.Json.JsonSerializer.Serialize(new PayloadManifest([], []) { Uninstall = [] }));
+}
+await using (FileStream source = File.OpenRead(legacyPayload))
+    await InstallationEngine.InstallAsync(source, Path.Combine(sandbox, "legacy-install"));
+Check(true, "従来の ZIP パッケージも読み込める");
+string nativeOverlay = Path.Combine(sandbox, "NativeOverlay.exe");
+string runtimeArchive = Path.Combine(sandbox, "Runtime.7z");
+await File.WriteAllBytesAsync(nativeOverlay, "native prefix"u8.ToArray());
+await File.WriteAllBytesAsync(runtimeArchive, "shared runtime"u8.ToArray());
+await SetupArchive.AppendNativeAsync(nativeOverlay, runtimeArchive, payload, 1);
+await using (Stream generated = SetupArchive.OpenUninstaller(nativeOverlay)!)
+{
+    string generatedPath = Path.Combine(sandbox, "NativeUninstall.exe");
+    await using (FileStream target = File.Create(generatedPath)) await generated.CopyToAsync(target);
+    byte[] generatedBytes = await File.ReadAllBytesAsync(generatedPath);
+    Check(generatedBytes.AsSpan(0, 27).SequenceEqual("native prefixshared runtime"u8)
+        && generatedBytes.Length == 27 + 64 && SetupArchive.OpenUninstaller(generatedPath) is null,
+        "削除 EXE は共有ランタイムから生成しアプリ本体を含めない");
+}
 if (OperatingSystem.IsWindows())
 {
     string busyRoot = Path.Combine(sandbox, "busy-install");
@@ -336,4 +382,9 @@ static void ExpectInvalid(Action action, string fragment, string label)
     try { action(); }
     catch (InvalidDataException ex) when (ex.Message.Contains(fragment)) { Console.WriteLine($"PASS: {label}"); return; }
     throw new Exception(label);
+}
+
+sealed class InlineProgress(Action<string> report) : IProgress<string>
+{
+    public void Report(string value) => report(value);
 }

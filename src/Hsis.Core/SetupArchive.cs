@@ -2,11 +2,48 @@ using System.Text;
 
 namespace Hsis.Core;
 
-/// <summary>Installation data stored after the .NET bundle, outside startup extraction.</summary>
+/// <summary>Segments appended to a native launcher, with compatibility for the earlier .NET bundle layout.</summary>
 public static class SetupArchive
 {
     private const string Magic = "HSISPKG1";
     private const int FooterSize = 40;
+    private const int NativeFooterSize = 64;
+    private sealed record NativeFooter(long NativeLength, long RuntimeOffset, long RuntimeLength, long PayloadOffset, long PayloadLength, long Mode, long Depth);
+
+    public static async Task AppendNativeAsync(string executable, string runtime, string payload, int depth, CancellationToken cancellationToken = default)
+    {
+        await using FileStream output = new(executable, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        long nativeLength = output.Length;
+        output.Position = nativeLength;
+        await using (FileStream input = File.OpenRead(runtime)) await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+        long payloadOffset = output.Position;
+        await using (FileStream input = File.OpenRead(payload)) await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+        WriteNativeFooter(output, new(nativeLength, nativeLength, payloadOffset - nativeLength, payloadOffset, output.Position - payloadOffset, 0, depth));
+    }
+
+    private static void WriteNativeFooter(Stream output, NativeFooter footer)
+    {
+        using BinaryWriter writer = new(output, Encoding.UTF8, true);
+        writer.Write("HSISPKG2"u8);
+        writer.Write(footer.NativeLength); writer.Write(footer.RuntimeOffset); writer.Write(footer.RuntimeLength);
+        writer.Write(footer.PayloadOffset); writer.Write(footer.PayloadLength); writer.Write(footer.Mode); writer.Write(footer.Depth);
+    }
+
+    private static NativeFooter? ReadNativeFooter(FileStream file)
+    {
+        if (file.Length < NativeFooterSize) return null;
+        file.Position = file.Length - NativeFooterSize;
+        using BinaryReader reader = new(file, Encoding.UTF8, true);
+        if (!reader.ReadBytes(8).AsSpan().SequenceEqual("HSISPKG2"u8)) return null;
+        NativeFooter footer = new(reader.ReadInt64(), reader.ReadInt64(), reader.ReadInt64(), reader.ReadInt64(), reader.ReadInt64(), reader.ReadInt64(), reader.ReadInt64());
+        long end = file.Length - NativeFooterSize;
+        if (footer.NativeLength <= 0 || footer.RuntimeOffset != footer.NativeLength || footer.RuntimeLength <= 0
+            || footer.RuntimeOffset > end - footer.RuntimeLength || footer.PayloadOffset != footer.RuntimeOffset + footer.RuntimeLength
+            || footer.PayloadLength < 0 || footer.PayloadOffset > end - footer.PayloadLength || footer.PayloadOffset + footer.PayloadLength != end
+            || footer.Mode is not (0 or 1) || footer.Depth < 0 || footer.Depth > 100)
+            throw new InvalidDataException("セットアップのデータ範囲が不正です。");
+        return footer;
+    }
 
     public static async Task AppendAsync(string executable, string payload, string? uninstaller, CancellationToken cancellationToken = default)
     {
@@ -36,6 +73,21 @@ public static class SetupArchive
         FileStream file = new(executable, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
         try
         {
+            if (ReadNativeFooter(file) is NativeFooter native)
+            {
+                if (!uninstaller) return new SegmentStream(file, native.PayloadOffset, native.PayloadLength);
+                if (native.Mode == 1) { file.Dispose(); return null; }
+                string temporary = Path.Combine(Path.GetTempPath(), "HsisUninstall-" + Guid.NewGuid().ToString("N"));
+                FileStream generated = new(temporary, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read, 1024 * 1024, FileOptions.DeleteOnClose);
+                try
+                {
+                    using (SegmentStream content = new(file, 0, native.PayloadOffset)) content.CopyTo(generated);
+                    WriteNativeFooter(generated, native with { PayloadLength = 0, Mode = 1 });
+                    generated.Position = 0;
+                    return generated;
+                }
+                catch { generated.Dispose(); throw; }
+            }
             if (file.Length < FooterSize) throw new InvalidDataException("セットアップのデータ情報がありません。");
             file.Position = file.Length - FooterSize;
             using BinaryReader reader = new(file, Encoding.UTF8, true);

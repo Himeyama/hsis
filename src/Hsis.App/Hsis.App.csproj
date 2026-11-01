@@ -32,13 +32,13 @@
   <ItemGroup Condition="'$(HsisPackageDirectory)' != '' and Exists('$(HsisPackageDirectory)/AppIcon.png')">
     <EmbeddedResource Include="$(HsisPackageDirectory)/AppIcon.png" LogicalName="Hsis.AppIcon.png" />
   </ItemGroup>
-  <ItemGroup Condition="'$(HsisUninstaller)' == 'true'">
-    <AssemblyMetadata Include="Hsis.Uninstaller" Value="true" />
-    <EmbeddedResource Include="$(HsisPackageDirectory)/UninstallerPayload.zip" LogicalName="Hsis.Payload.zip" />
+  <ItemGroup Condition="'$(HsisPackageDirectory)' != ''">
+    <EmbeddedResource Include="$(HsisPackageDirectory)/UninstallerPayload.bin" LogicalName="Hsis.UninstallerPayload" />
   </ItemGroup>
   <ItemGroup Condition="'$(HsisPackageDirectory)' == ''">
     <Content Include="../../Directory.Build.props" Link="Template/Directory.Build.props" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../Hsis.Core/*.cs;../Hsis.Core/*.csproj" Link="Template/src/Hsis.Core/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="*.cs;*.xaml;*.csproj;app.manifest;Hsis.ico" Link="Template/src/Hsis.App/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Hsis.Bootstrap/**/*" Link="Template/src/Hsis.Bootstrap/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -9,6 +9,19 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $executable = (Resolve-Path -LiteralPath $SetupPath).Path
+$probe = [IO.File]::OpenRead($executable)
+try {
+    if ($probe.Length -ge 64) {
+        $probe.Position = $probe.Length - 64
+        $reader = [IO.BinaryReader]::new($probe)
+        $native = [Text.Encoding]::ASCII.GetString($reader.ReadBytes(8)) -eq 'HSISPKG2'
+    } else { $native = $false }
+} finally { $probe.Dispose() }
+if ($native) {
+    if ($UninstallDirectory) { throw 'Pass the generated uninstaller EXE directly for native packages.' }
+    & "$PSScriptRoot/Check-PreparedStartup.ps1" -SetupPath $executable -ExpectedTitle $ExpectedTitle -RequirePreparing -ReportPath $ReportPath
+    return
+}
 $startInfo = New-Object System.Diagnostics.ProcessStartInfo
 $startInfo.FileName = $executable
 $startInfo.WorkingDirectory = Split-Path -Parent $executable

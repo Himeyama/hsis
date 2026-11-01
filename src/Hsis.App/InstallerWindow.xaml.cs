@@ -145,11 +145,12 @@ public sealed partial class InstallerWindow : Window
         _installing = true;
         _page = 3;
         ShowPage();
+        await Task.Yield();
         try
         {
             using Stream resource = InstallerResources.OpenPayload();
             using Stream? uninstaller = _uninstallDirectory is null ? InstallerResources.OpenUninstaller() : null;
-            Progress<string> progress = new(file => ProgressStatus.Text = $"配置: {file}");
+            Progress<string> progress = new(message => ProgressStatus.Text = message);
             if (_uninstallDirectory is not null) await InstallationEngine.UninstallAsync(resource, destination, progress);
             else await InstallationEngine.InstallAsync(resource, destination, progress, uninstaller: uninstaller);
             _installedDirectory = Path.GetFullPath(destination);

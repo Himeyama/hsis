@@ -46,15 +46,9 @@ SectionEnd
     $setups = @(Get-ChildItem -LiteralPath $output -Recurse -Filter "$name.exe" -File)
     if ($setups.Count -ne 1) { throw "$name setup not found" }
     $setup = $setups[0]
-    $inputFile = [IO.File]::OpenRead($setup.FullName)
-    try {
-        $inputFile.Position = $inputFile.Length - 16
-        $reader = [IO.BinaryReader]::new($inputFile)
-        $offset = $reader.ReadInt64(); $length = $reader.ReadInt64()
-        $inputFile.Position = $offset
-        $uninstaller = Join-Path $work "$name-Uninstall.exe"
-        [IO.File]::WriteAllBytes($uninstaller, $reader.ReadBytes([int]$length))
-    } finally { $inputFile.Dispose() }
+    $uninstaller = Join-Path $work "$name-Uninstall.exe"
+    & dotnet run --project (Join-Path $root 'tests/Hsis.Checks') -c Release --no-build -- --extract-uninstaller $setup.FullName $uninstaller
+    if ($LASTEXITCODE -ne 0) { throw 'Uninstaller extraction failed' }
     foreach ($executable in @($setup.FullName, $uninstaller)) {
         $actualIcon = [Drawing.Icon]::ExtractAssociatedIcon($executable)
         $actual = $actualIcon.ToBitmap()

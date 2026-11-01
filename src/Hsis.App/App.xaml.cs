@@ -19,6 +19,17 @@ public partial class App : Application
         int rootArgument = Array.IndexOf(arguments, "--uninstall");
         if (rootArgument >= 0 && rootArgument + 1 < arguments.Length) uninstallDirectory = Path.GetFullPath(arguments[rootArgument + 1]);
         _window = new InstallerWindow(definition, uninstallDirectory);
+        string[] startupArguments = Environment.GetCommandLineArgs();
+        int ready = Array.IndexOf(startupArguments, "--startup-event");
+        if (ready >= 0 && ready + 1 < startupArguments.Length && _window.Content is FrameworkElement content)
+        {
+            // Keep the native preparing window until XAML is loaded and its UI queue is running.
+            content.Loaded += (_, _) => _window.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                using EventWaitHandle signal = EventWaitHandle.OpenExisting(startupArguments[ready + 1]);
+                signal.Set();
+            });
+        }
         _window.Activate();
     }
 }

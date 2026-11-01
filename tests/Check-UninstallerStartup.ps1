@@ -3,6 +3,18 @@ param([Parameter(Mandatory)][string]$UninstallerPath, [string]$ExpectedTitle = '
 
 $ErrorActionPreference = 'Stop'
 $executable = (Resolve-Path -LiteralPath $UninstallerPath).Path
+$probe = [IO.File]::OpenRead($executable)
+try {
+    if ($probe.Length -ge 64) {
+        $probe.Position = $probe.Length - 64
+        $reader = [IO.BinaryReader]::new($probe)
+        $native = [Text.Encoding]::ASCII.GetString($reader.ReadBytes(8)) -eq 'HSISPKG2'
+    } else { $native = $false }
+} finally { $probe.Dispose() }
+if ($native) {
+    & "$PSScriptRoot/Check-PreparedStartup.ps1" -SetupPath $executable -ExpectedTitle $ExpectedTitle -RequirePreparing
+    return
+}
 $waiting = Start-Process -FilePath $executable -ArgumentList @('--uninstall', ('"' + (Split-Path -Parent $executable) + '"'), '--wait-pid', $PID) -PassThru -WindowStyle Hidden
 try {
     Start-Sleep -Seconds 2
