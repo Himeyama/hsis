@@ -1,4 +1,7 @@
 # HSIS
+インストーラー作成アプリ
+
+<img width="600" src="https://github.com/user-attachments/assets/52bdb38a-db7e-49c1-9d93-8ef7ab0123f0" />
 
 現在のバージョン: **0.4.4**。運用ルールは `AGENTS.md`、変更履歴は `CHANGELOG.md` を参照してください。
 
