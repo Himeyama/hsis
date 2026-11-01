@@ -1,4 +1,6 @@
 using Microsoft.UI.Xaml;
+using System.Runtime.InteropServices;
+using Windows.Graphics;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 
@@ -6,6 +8,17 @@ namespace Hsis.App;
 
 internal static class WindowTools
 {
+    [DllImport("user32.dll", ExactSpelling = true)]
+    private static extern uint GetDpiForWindow(nint window);
+
+    public static void ResizeForDisplayScale(Window window, int width, int height)
+    {
+        double scale = GetDpiForWindow(WindowNative.GetWindowHandle(window)) / 96.0;
+        window.AppWindow.Resize(new SizeInt32(
+            (int)Math.Round(width * scale),
+            (int)Math.Round(height * scale)));
+    }
+
     public static void UseCustomTitleBar(Window window, FrameworkElement titleBar)
     {
         window.ExtendsContentIntoTitleBar = true;

@@ -24,6 +24,7 @@ public sealed partial class InstallerWindow : Window
         InitializeComponent();
         WindowTools.Configure(this);
         WindowTools.UseCustomTitleBar(this, AppTitleBar);
+        WindowTools.ResizeForDisplayScale(this, 640, 480);
         Title = $"{definition.Name} セットアップ";
         AppName.Text = definition.Name;
         VersionLabel.Text = definition.Version;

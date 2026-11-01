@@ -85,7 +85,7 @@ public sealed class PackageBuilder
         string png = Path.Combine(work, "AppIcon.png");
         string? executable = ApplicationIcon.FindExecutable(plan, definition);
         InstallFile? application = files.FirstOrDefault(file => file.Source == executable);
-        if (application is not null && File.Exists(png))
+        if (File.Exists(png))
         {
             string relative = @".hsis\Application.ico";
             if (files.Any(file => file.Destination.Equals(relative, StringComparison.OrdinalIgnoreCase)))
@@ -101,7 +101,7 @@ public sealed class PackageBuilder
             }
             files.Add(new(ico, relative));
             install = install.Select(operation => operation.Command == "createshortcut"
-                && operation.Arguments[1].Equals(@"$INSTDIR\" + application.Destination, StringComparison.OrdinalIgnoreCase)
+                && operation.Arguments[1].Equals(@"$INSTDIR\" + (application?.Destination ?? definition.LaunchExecutable), StringComparison.OrdinalIgnoreCase)
                 ? new ScriptOperation("createshortcut", [.. operation.Arguments.Take(2), @"$INSTDIR\" + relative]) : operation).ToList();
             // Apps & features reads DisplayIcon independently of shortcut icons.
             IEnumerable<ScriptOperation> registrations = install.Where(operation => operation.Command == "writeregstr"

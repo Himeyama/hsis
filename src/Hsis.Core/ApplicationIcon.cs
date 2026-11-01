@@ -37,13 +37,17 @@ public static class ApplicationIcon
     public static bool TryWrite(InstallPlan plan, PackageDefinition definition, string output, Action<string> log, string? script = null)
     {
         string? executable = FindExecutable(plan, definition);
-        if (executable is null || !OperatingSystem.IsWindows()) return false;
+        if (!OperatingSystem.IsWindows()) return false;
         try
         {
-            if (Extract(executable, output, log)) return true;
-            string? iconFile = FindIconFile(plan, executable, script);
+            if (executable is not null && Extract(executable, output, log)) return true;
+            // A build directory can contain apphost.exe and helper EXEs instead
+            // of the final application name. Still consult its project icon.
+            string candidate = executable ?? (string.IsNullOrWhiteSpace(definition.LaunchExecutable)
+                ? definition.Name + ".exe" : definition.LaunchExecutable);
+            string? iconFile = FindIconFile(plan, candidate, script);
             if (iconFile is not null) { SaveImage(iconFile, output); log($"アプリアイコン: {iconFile}"); return true; }
-            log($"対象アプリのアイコンを取得できません: {executable}");
+            log($"対象アプリのアイコンを取得できません: {candidate}");
             return false;
         }
         catch (Exception ex) when (ex is ExternalException or ArgumentException or IOException or UnauthorizedAccessException)

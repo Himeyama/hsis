@@ -301,6 +301,17 @@ if (OperatingSystem.IsWindowsVersionAtLeast(6, 1))
     string iconScript = Path.Combine(iconProject, "installer", "Main.nsi");
     await File.WriteAllTextAsync(iconScript, "Name Main");
     Check(ApplicationIcon.FindIconFile(iconPlan, applicationExecutable, iconScript) == projectIcon, "対象プロジェクトが指定するアプリアイコンを選ぶ");
+    string apphostExecutable = Path.Combine(sandbox, "apphost.exe");
+    File.Copy(applicationExecutable, apphostExecutable);
+    InstallPlan apphostPlan = iconPlan with { Files = [new(apphostExecutable, @"app\apphost.exe"), new("missing-helper.exe", @"app\Helper.exe")] };
+    string apphostWork = Path.Combine(sandbox, "apphost-icon");
+    Directory.CreateDirectory(apphostWork);
+    Check(ApplicationIcon.FindExecutable(apphostPlan, iconDefinition) is null, "apphost と補助 EXE を対象アプリと誤認しない");
+    Check(ApplicationIcon.TryWrite(apphostPlan, iconDefinition, Path.Combine(apphostWork, "AppIcon.png"), Console.WriteLine, iconScript),
+        "対象 EXE がなくても起動ファイル名からプロジェクトのアイコンを取得");
+    InstallPlan apphostPrepared = PackageBuilder.PreparePlan(apphostPlan, apphostWork);
+    Check(File.Exists(Path.Combine(apphostWork, "Application.ico")) && apphostPrepared.Files.Any(file => file.Destination == @".hsis\Application.ico"),
+        "対象 EXE がなくてもセットアップとタスクバー用 ICO を生成して同梱");
     string pngPath = Path.Combine(sandbox, "AppIcon.png");
     List<string> iconLog = [];
     Check(ApplicationIcon.TryWrite(iconPlan, iconDefinition, pngPath, iconLog.Add, iconScript) && iconLog.Contains($"アプリアイコン: {projectIcon}"), "独自アイコンのない EXE には汎用アイコンではなくプロジェクトのアイコンを使う");
