@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Hsis.Core;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Hsis.App;
 
@@ -8,10 +9,14 @@ public sealed partial class BuilderWindow : Window
 {
     private string? _setup;
     private bool _building;
+    private string? _loadedInputs;
+    private bool _definitionReady;
+    private List<string> _missingConstants = [];
     public BuilderWindow()
     {
         InitializeComponent();
-        WindowTools.Configure(this, 940, 920);
+        WindowTools.Configure(this);
+        WindowTools.UseCustomTitleBar(this, AppTitleBar);
         OutputPath.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "HSIS", "Output");
         InstallPath.Text = @"$LOCALAPPDATA\Programs\My Application";
         AppWindow.Closing += (_, e) => { if (_building) e.Cancel = true; };
@@ -24,21 +29,40 @@ public sealed partial class BuilderWindow : Window
             ScriptPath.Text = path;
             LoadDefinition();
         }
-        catch (Exception ex) { Status.Text = "定義を読み込めませんでした"; BuildLog.Text = ex.Message; }
+        catch (Exception ex) { ShowDefinitionError(ex); }
     }
-    private Dictionary<string, string> GetConstants() => DefinitionConstants.Parse(BuildConstants.Text.Split('\n'));
+    private Dictionary<string, string> GetConstants() => DefinitionConstants.ParseValues(BuildConstants.Text);
     private void ReadDefinition_Click(object sender, RoutedEventArgs e)
     {
         try { LoadDefinition(); }
-        catch (Exception ex) { Status.Text = "定義を読み込めませんでした"; BuildLog.Text = ex.Message; }
+        catch (Exception ex) { ShowDefinitionError(ex); }
     }
     private void LoadDefinition()
     {
-        InstallPlan plan = new DefinitionCompiler().Compile(ScriptPath.Text.Trim(), GetConstants());
-        ProductName.Text = plan.Definition.Name; ProductVersion.Text = plan.Definition.Version;
-        InstallPath.Text = plan.Definition.InstallDirectory; LicenseText.Text = plan.Definition.License;
-        LaunchPath.Text = plan.Definition.LaunchExecutable; AdminRequired.IsChecked = plan.Definition.RequiresAdministrator;
-        Status.Text = "定義を読み込みました"; BuildLog.Text = "";
+        _definitionReady = false;
+        _loadedInputs = null;
+        DefinitionInspection inspection = new DefinitionCompiler().Inspect(ScriptPath.Text.Trim(), GetConstants());
+        BuildConstants.Text = DefinitionConstants.AddMissing(BuildConstants.Text, inspection.MissingConstants);
+        ProductName.Text = inspection.Definition.Name; ProductVersion.Text = inspection.Definition.Version;
+        InstallPath.Text = inspection.Definition.InstallDirectory; LicenseText.Text = inspection.Definition.License;
+        LaunchPath.Text = inspection.Definition.LaunchExecutable; AdminRequired.IsChecked = inspection.Definition.RequiresAdministrator;
+        _loadedInputs = ScriptPath.Text.Trim() + "\n" + BuildConstants.Text;
+        _definitionReady = inspection.MissingConstants.Count == 0;
+        _missingConstants = inspection.MissingConstants;
+        DefinitionNotice.IsOpen = false;
+        Status.Text = "定義を読み込みました";
+        BuildLog.Text = "";
+    }
+    private void ShowDefinitionError(Exception error)
+    {
+        _definitionReady = false;
+        _loadedInputs = null;
+        Status.Text = "定義を読み込めませんでした";
+        DefinitionNotice.Severity = InfoBarSeverity.Error;
+        DefinitionNotice.Title = "定義を読み込めませんでした";
+        DefinitionDetails.Text = error.Message;
+        DefinitionNotice.IsOpen = true;
+        BuildLog.Text = error.Message;
     }
     private async void PickOutput_Click(object sender, RoutedEventArgs e) { if (await WindowTools.PickFolderAsync(this) is string path) OutputPath.Text = path; }
     private async void PickLicense_Click(object sender, RoutedEventArgs e)
@@ -59,6 +83,8 @@ public sealed partial class BuilderWindow : Window
         try
         {
             if (string.IsNullOrWhiteSpace(output)) throw new InvalidOperationException("出力先を指定してください。");
+            if (_loadedInputs != script + "\n" + BuildConstants.Text) LoadDefinition();
+            if (!_definitionReady) throw new InvalidOperationException("未指定のビルド定数: " + string.Join(", ", _missingConstants));
             Dictionary<string, string> defines = GetConstants();
             PackageDefinition definition = new DefinitionCompiler().Compile(script, defines).Definition with
             {

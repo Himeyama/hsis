@@ -51,7 +51,7 @@ public static class RuntimeOperations
         return result;
     }
 
-    public static void Execute(IEnumerable<ScriptOperation> operations, string installDirectory, string? setupExecutable, IProgress<string>? progress)
+    public static void Execute(IEnumerable<ScriptOperation> operations, string installDirectory, Stream? uninstaller, IProgress<string>? progress)
     {
         foreach (ScriptOperation operation in operations)
         {
@@ -61,11 +61,13 @@ public static class RuntimeOperations
             {
                 case "createdirectory": Directory.CreateDirectory(ResolvePath(args[0], installDirectory)); break;
                 case "writeuninstaller":
-                    if (setupExecutable is null || !File.Exists(setupExecutable) || Path.GetFileName(setupExecutable).Equals("dotnet.exe", StringComparison.OrdinalIgnoreCase))
+                    if (uninstaller is null)
                         throw new InvalidOperationException("アンインストーラー生成には発行済みセットアップが必要です。");
                     string target = ResolvePath(args[0], installDirectory);
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    File.Copy(setupExecutable, target, true); break;
+                    if (uninstaller.CanSeek) uninstaller.Position = 0;
+                    using (FileStream file = File.Create(target)) uninstaller.CopyTo(file);
+                    break;
                 case "delete": File.Delete(ResolvePath(args[0], installDirectory)); break;
                 case "rmdir":
                     string directory = ResolvePath(args[^1], installDirectory);
@@ -111,6 +113,9 @@ public static class RuntimeOperations
                 link = dynamicShell.CreateShortcut(shortcut);
                 dynamic dynamicLink = link;
                 dynamicLink.TargetPath = ResolvePath(args[1], installDirectory);
+                dynamicLink.IconLocation = args.Length > 2
+                    ? ResolvePath(args[2], installDirectory) + ",0"
+                    : ResolvePath(args[1], installDirectory) + ",0";
                 dynamicLink.WorkingDirectory = Path.GetDirectoryName(dynamicLink.TargetPath);
                 dynamicLink.Save();
             }

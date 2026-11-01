@@ -1,6 +1,7 @@
 namespace Hsis.Core;
 
 public sealed record InstallFile(string Source, string Destination);
+public sealed record DefinitionInspection(PackageDefinition Definition, List<string> MissingConstants);
 public sealed record InstallPlan(PackageDefinition Definition, string OutputFile, List<InstallFile> Files, List<string> Directories)
 {
     public List<ScriptOperation> Initialize { get; init; } = [];

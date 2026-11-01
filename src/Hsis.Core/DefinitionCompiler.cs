@@ -20,12 +20,24 @@ public sealed class DefinitionCompiler
     private readonly List<ScriptOperation> _install = [];
     private readonly List<ScriptOperation> _remove = [];
     private readonly HashSet<string> _headers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _missingConstants = new(StringComparer.Ordinal);
+    private bool _inspecting;
 
     public InstallPlan Compile(string script, IReadOnlyDictionary<string, string>? defines = null)
+        => CompileCore(script, defines, false);
+
+    public DefinitionInspection Inspect(string script, IReadOnlyDictionary<string, string>? defines = null)
+    {
+        InstallPlan plan = CompileCore(script, defines, true);
+        return new(plan.Definition, _missingConstants.Order(StringComparer.Ordinal).ToList());
+    }
+
+    private InstallPlan CompileCore(string script, IReadOnlyDictionary<string, string>? defines, bool inspecting)
     {
         _defines.Clear(); _activeIncludes.Clear(); _files.Clear(); _directories.Clear();
         _definition = new(); _outputFile = "Setup.exe"; _outPath = "$INSTDIR"; _inSection = false;
         _uninstall = false; _inFunction = false; _initialize.Clear(); _install.Clear(); _remove.Clear(); _headers.Clear();
+        _inspecting = inspecting; _missingConstants.Clear();
         if (defines is not null) foreach (KeyValuePair<string, string> define in defines) _defines.Add(define.Key, define.Value);
         ReadFile(Path.GetFullPath(script));
         if (_inSection) throw new InvalidDataException("SectionEnd がありません。");
@@ -43,6 +55,7 @@ public sealed class DefinitionCompiler
         if (!_activeIncludes.Add(path)) throw new InvalidDataException($"インクルードが循環しています: {path}");
         string[] lines = File.ReadAllLines(path, new UTF8Encoding(false, true));
         Stack<bool> conditions = new();
+        Stack<string?> requiredConstants = new();
         bool active = true;
         string pending = "";
         try
@@ -60,6 +73,7 @@ public sealed class DefinitionCompiler
                     if (command is "!ifdef" or "!ifndef")
                     {
                         Require(raw, 2); conditions.Push(active);
+                        requiredConstants.Push(command == "!ifndef" && !_defines.ContainsKey(raw[1]) ? raw[1] : null);
                         active = active && (_defines.ContainsKey(raw[1]) == (command == "!ifdef"));
                         continue;
                     }
@@ -67,16 +81,24 @@ public sealed class DefinitionCompiler
                     {
                         Require(raw, 1);
                         if (conditions.Count == 0) throw new InvalidDataException("対応する !ifdef がありません。");
+                        requiredConstants.Pop(); requiredConstants.Push(null);
                         active = conditions.Peek() && !active; continue;
                     }
                     if (command == "!endif")
                     {
                         Require(raw, 1);
                         if (conditions.Count == 0) throw new InvalidDataException("対応する !ifdef がありません。");
+                        requiredConstants.Pop();
                         active = conditions.Pop(); continue;
                     }
                     if (!active) continue;
+                    if (_inspecting && command == "!error" && requiredConstants.FirstOrDefault(name => name is not null) is string required)
+                    {
+                        _missingConstants.Add(required);
+                        continue;
+                    }
                     List<string> tokens = raw.Select(token => Expand(token, path)).ToList();
+                    if (_inspecting && tokens.Any(token => Regex.Matches(token, @"\$\{([^}]+)\}").Any(match => _missingConstants.Contains(match.Groups[1].Value)))) continue;
                     Parse(tokens, path);
                 }
                 catch (Exception ex) when (ex is InvalidDataException or IOException or ArgumentException)
@@ -200,6 +222,7 @@ public sealed class DefinitionCompiler
         }
         if (index != tokens.Count - 1) throw new InvalidDataException("File [/r] [/oname=名前] ソース を指定してください。");
         if (recursive && rename is not null) throw new InvalidDataException("/r と /oname は併用できません。");
+        if (_inspecting) return;
         string pattern = Path.GetFullPath(Path.Combine(directory, tokens[index]));
         string parent = Path.GetDirectoryName(pattern)!;
         string filter = Path.GetFileName(pattern);
@@ -216,7 +239,8 @@ public sealed class DefinitionCompiler
         foreach (string path in paths)
         {
             string relative = rename ?? (recursive ? Path.GetRelativePath(relativeRoot, path) : Path.GetFileName(path));
-            string destination = NormalizeDestination(_outPath + "\\" + relative);
+            // Source file names are literal, even when they contain NSIS-like dollar names.
+            string destination = NormalizeDestination(_outPath + "\\" + relative, rename is null);
             _files.Add(new(path, destination));
         }
     }
@@ -231,9 +255,12 @@ public sealed class DefinitionCompiler
             "RunningX64" when _headers.Contains("x64.nsh") => match.Value,
             "AtLeastBuild" when _headers.Contains("WinVer.nsh") => match.Value,
             string key when _defines.TryGetValue(key, out string? replacement) => replacement,
+            string key when _inspecting => MissingConstant(key, match.Value),
             _ => throw new InvalidDataException($"未定義の定数: {match.Value}")
         });
     }
+
+    private string MissingConstant(string key, string placeholder) { _missingConstants.Add(key); return placeholder; }
 
     private void ParseInitialize(List<string> tokens)
     {
@@ -284,12 +311,15 @@ public sealed class DefinitionCompiler
     }
 
     public static string NormalizeDestination(string path)
+        => NormalizeDestination(path, false);
+
+    private static string NormalizeDestination(string path, bool allowLiteralDollar)
     {
         string normalized = path.Replace('/', '\\');
         if (!normalized.Equals("$INSTDIR", StringComparison.OrdinalIgnoreCase) && !normalized.StartsWith("$INSTDIR\\", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("配置先には $INSTDIR 以下を指定してください。");
         string relative = normalized[8..].TrimStart('\\');
-        if (relative.Split('\\').Any(part => part is "." or ".." || part.Contains(':') || part.Contains('$')) || Path.IsPathRooted(relative))
+        if (relative.Split('\\').Any(part => part is "." or ".." || part.Contains(':') || (!allowLiteralDollar && part.Contains('$'))) || Path.IsPathRooted(relative))
             throw new InvalidDataException($"無効な配置先: {path}");
         return relative;
     }

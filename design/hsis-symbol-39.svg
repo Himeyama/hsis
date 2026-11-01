@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <title>HSIS symbol 39</title>
+  <desc>A transparent blue and cyan hexagonal ribbon ring, symmetric horizontally and vertically.</desc>
+  <defs>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#08B7F4"/>
+      <stop offset="0.5" stop-color="#16E5EB"/>
+      <stop offset="1" stop-color="#08B7F4"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0759F3"/>
+      <stop offset="0.5" stop-color="#0039CF"/>
+      <stop offset="1" stop-color="#0759F3"/>
+    </linearGradient>
+    <path id="cap" d="M256 32 C260 32 264 33 268 35 L444 137 Q452 142 452 151 L360 204 L256 144 L152 204 L60 151 Q60 142 68 137 L244 35 C248 33 252 32 256 32 Z"/>
+    <path id="side" d="M60 151 L152 204 V308 L60 361 Z"/>
+  </defs>
+  <!-- Mirrored geometry and gradients preserve both reflection axes. -->
+  <use href="#side" fill="url(#blue)"/>
+  <use href="#side" transform="translate(512 0) scale(-1 1)" fill="url(#blue)"/>
+  <use href="#cap" fill="url(#cyan)"/>
+  <use href="#cap" transform="translate(0 512) scale(1 -1)" fill="url(#cyan)"/>
+</svg>

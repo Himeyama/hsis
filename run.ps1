@@ -20,7 +20,8 @@ try {
 
         # Always publish the current source before launching Studio.
         & {
-            & dotnet publish $projectPath -c Release -p:Platform=x64 -o $outputDirectory
+            # Keep local startup independent of the online vulnerability audit service.
+            & dotnet publish $projectPath -c Release -p:Platform=x64 -p:NuGetAudit=false -o $outputDirectory
             if ($LASTEXITCODE -ne 0) {
                 throw "Build failed (exit code $LASTEXITCODE)."
             }

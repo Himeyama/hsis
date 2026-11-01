@@ -5,7 +5,7 @@ namespace Hsis.Core;
 
 public static class InstallationEngine
 {
-    public static async Task InstallAsync(Stream payload, string destination, IProgress<string>? progress = null, CancellationToken cancellationToken = default, string? setupExecutable = null)
+    public static async Task InstallAsync(Stream payload, string destination, IProgress<string>? progress = null, CancellationToken cancellationToken = default, Stream? uninstaller = null)
     {
         string root = Path.GetFullPath(destination);
         using ZipArchive archive = new(payload, ZipArchiveMode.Read, true);
@@ -29,7 +29,7 @@ public static class InstallationEngine
             await using FileStream file = new(target, FileMode.Create, FileAccess.Write, FileShare.None);
             await source.CopyToAsync(file, cancellationToken).ConfigureAwait(false);
         }
-        RuntimeOperations.Execute(manifest.Install, root, setupExecutable, progress);
+        RuntimeOperations.Execute(manifest.Install, root, uninstaller, progress);
     }
 
     public static async Task UninstallAsync(Stream payload, string destination, IProgress<string>? progress = null)

@@ -6,10 +6,24 @@ namespace Hsis.App;
 
 internal static class WindowTools
 {
-    public static void Configure(Window window, int width, int height)
+    public static void UseCustomTitleBar(Window window, FrameworkElement titleBar)
     {
+        window.ExtendsContentIntoTitleBar = true;
+        window.SetTitleBar(titleBar);
+        window.AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+        window.AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
+        void UpdateColors()
+        {
+            window.AppWindow.TitleBar.ButtonForegroundColor = titleBar.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
+            window.AppWindow.TitleBar.ButtonInactiveForegroundColor = Microsoft.UI.Colors.Gray;
+        }
+        titleBar.ActualThemeChanged += (_, _) => UpdateColors();
+        UpdateColors();
+    }
+    public static void Configure(Window window)
+    {
+        window.AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Hsis.ico"));
         window.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
-        window.AppWindow.Resize(new Windows.Graphics.SizeInt32(width, height));
     }
     public static async Task<string?> PickFileAsync(Window window, params string[] extensions)
     {

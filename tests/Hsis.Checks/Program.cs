@@ -1,14 +1,91 @@
 using Hsis.Core;
+using System.Text;
+using System.Reflection;
+using System.Collections.Concurrent;
+
+if (args is ["--emit-unicode-log"])
+{
+    Console.OutputEncoding = new UTF8Encoding(false);
+    Console.WriteLine("標準出力：日本語のビルドログ ✓");
+    Console.Error.WriteLine("標準エラー：日本語の診断ログ ✓");
+    return;
+}
+if (args is ["--extract-uninstaller", string setupExecutable, string destinationPath])
+{
+    using Stream resource = SetupArchive.OpenUninstaller(setupExecutable) ?? throw new InvalidDataException("専用アンインストーラーがありません。");
+    await using FileStream destinationFile = File.Create(destinationPath);
+    await resource.CopyToAsync(destinationFile);
+    return;
+}
+if (args is ["--extract-icon", string executablePath, string scriptPath, string iconOutput])
+{
+    PackageDefinition definition = new() { Name = Path.GetFileNameWithoutExtension(executablePath), LaunchExecutable = Path.GetFileName(executablePath) };
+    InstallPlan plan = new(definition, "Setup.exe", [new(executablePath, definition.LaunchExecutable)], []);
+    if (!ApplicationIcon.TryWrite(plan, definition, iconOutput, Console.WriteLine, scriptPath)) throw new Exception("アプリアイコンを取得できません。");
+    return;
+}
 
 string root = Path.GetFullPath(args.Length > 0 ? args[0] : ".");
 string sandbox = Path.Combine(root, "artifacts", "native-check", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(sandbox);
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+Encoding originalEncoding = Console.OutputEncoding;
+ConcurrentQueue<string> childLog = new();
+try
+{
+    Console.OutputEncoding = Encoding.GetEncoding(932);
+    await ProcessRunner.RunAsync("dotnet", [Assembly.GetExecutingAssembly().Location, "--emit-unicode-log"], sandbox, childLog.Enqueue);
+}
+finally { Console.OutputEncoding = originalEncoding; }
+Check(childLog.Contains("標準出力：日本語のビルドログ ✓") && childLog.Contains("標準エラー：日本語の診断ログ ✓"), "親プロセスが Shift-JIS でも子プロセスの UTF-8 ログを正しく読み取る");
 DefinitionCompiler compiler = new();
 InstallPlan sample = compiler.Compile(Path.Combine(root, "samples", "HelloApp", "installer.nsi"));
 Check(sample.Definition.Name == "Hello App" && sample.Definition.License.Contains("サンプル利用規約"), "定義から表示情報・規約を読み取る");
 Check(sample.Files.Count == 2 && !sample.Definition.RequiresAdministrator, "File と権限を読み取る");
+InstallPlan automatic = PackageBuilder.PreparePlan(sample, sandbox);
+Check(automatic.Definition.Uninstaller == "Uninstall.exe" && automatic.Install.Any(operation => operation.Command == "writeuninstaller"), "指定がなくてもアンインストーラーを生成する");
+string automaticPayload = Path.Combine(sandbox, "Automatic.zip");
+await PackageBuilder.CreatePayloadAsync(automatic, automaticPayload, Console.WriteLine);
+string automaticRoot = Path.Combine(sandbox, "automatic-install");
+using (MemoryStream uninstaller = new("test uninstaller"u8.ToArray()))
+await using (FileStream source = File.OpenRead(automaticPayload))
+    await InstallationEngine.InstallAsync(source, automaticRoot, uninstaller: uninstaller);
+await File.WriteAllTextAsync(Path.Combine(automaticRoot, "user-data.txt"), "keep");
+await using (FileStream source = File.OpenRead(automaticPayload))
+    await InstallationEngine.UninstallAsync(source, automaticRoot);
+Check(!File.Exists(Path.Combine(automaticRoot, "hello.txt")) && !File.Exists(Path.Combine(automaticRoot, "Uninstall.exe"))
+    && File.Exists(Path.Combine(automaticRoot, "user-data.txt")), "自動アンインストールは配置ファイルを削除しユーザーデータを残す");
 string payload = Path.Combine(sandbox, "Payload.zip");
 await PackageBuilder.CreatePayloadAsync(sample, payload, Console.WriteLine);
+string overlayExecutable = Path.Combine(sandbox, "OverlaySetup.exe");
+string uninstallData = Path.Combine(sandbox, "UninstallerData.exe");
+byte[] hostPrefix = "HSIS test executable prefix"u8.ToArray();
+byte[] uninstallBytes = "HSIS independent uninstaller bytes"u8.ToArray();
+await File.WriteAllBytesAsync(overlayExecutable, hostPrefix);
+await File.WriteAllBytesAsync(uninstallData, uninstallBytes);
+await SetupArchive.AppendAsync(overlayExecutable, payload, uninstallData);
+await using (Stream embeddedUninstaller = SetupArchive.OpenUninstaller(overlayExecutable)!)
+{
+    using MemoryStream buffer = new();
+    await embeddedUninstaller.CopyToAsync(buffer);
+    Check(buffer.ToArray().SequenceEqual(uninstallBytes) && embeddedUninstaller.ReadByte() == -1, "EXE 末尾のアンインストーラーを他データと混在させず読み取る");
+    embeddedUninstaller.Seek(-1, SeekOrigin.End);
+    Check(embeddedUninstaller.ReadByte() == uninstallBytes[^1] && embeddedUninstaller.ReadByte() == -1, "末尾データを範囲内でシークできる");
+}
+string overlayDestination = Path.Combine(sandbox, "overlay-install");
+await using (Stream embeddedPayload = SetupArchive.OpenPayload(overlayExecutable))
+    await InstallationEngine.InstallAsync(embeddedPayload, overlayDestination);
+Check(File.Exists(Path.Combine(overlayDestination, "hello.txt")), "EXE の末尾から直接インストールデータを配置できる");
+Check((await File.ReadAllBytesAsync(overlayExecutable)).AsSpan(0, hostPrefix.Length).SequenceEqual(hostPrefix), "EXE 本体のバイト列を保持");
+string noUninstaller = Path.Combine(sandbox, "NoUninstaller.exe");
+await File.WriteAllBytesAsync(noUninstaller, hostPrefix);
+await SetupArchive.AppendAsync(noUninstaller, payload, null);
+Check(SetupArchive.OpenUninstaller(noUninstaller) is null, "アンインストーラーなしのセットアップにも対応");
+string brokenOverlay = Path.Combine(sandbox, "BrokenOverlay.exe");
+File.Copy(overlayExecutable, brokenOverlay);
+using (FileStream file = new(brokenOverlay, FileMode.Open, FileAccess.Write))
+using (BinaryWriter writer = new(file)) { file.Position = file.Length - 32; writer.Write(-1L); }
+ExpectInvalid(() => SetupArchive.OpenPayload(brokenOverlay), "データ範囲", "不正な末尾データ範囲を拒否");
 string destination = Path.Combine(sandbox, "日本語 App");
 await using (FileStream source = File.OpenRead(payload)) await InstallationEngine.InstallAsync(source, destination);
 Check(await File.ReadAllTextAsync(Path.Combine(destination, "hello.txt")) == await File.ReadAllTextAsync(Path.Combine(root, "samples", "HelloApp", "hello.txt")), "日本語・空白を含む配置先へのコピー");
@@ -40,6 +117,20 @@ await PackageBuilder.CreatePayloadAsync(recursive, recursivePayload, Console.Wri
 await using (FileStream source = File.OpenRead(recursivePayload)) await InstallationEngine.InstallAsync(source, destination);
 Check(File.Exists(Path.Combine(destination, "data", "renamed.txt")) && Directory.Exists(Path.Combine(destination, "empty")), "名前変更とフォルダー作成");
 
+string literalDirectory = Path.Combine(sandbox, "assets", "artifacts", "installer-startup-fix", "extracted", "$PLUGINSDIR");
+Directory.CreateDirectory(literalDirectory);
+await File.WriteAllTextAsync(Path.Combine(literalDirectory, "modern-wizard.bmp"), "literal dollar directory");
+await File.WriteAllTextAsync(Path.Combine(sandbox, "assets", "$name.txt"), "literal dollar file");
+InstallPlan literalFiles = compiler.Compile(script);
+Check(literalFiles.Files.Any(file => file.Destination == @"data\artifacts\installer-startup-fix\extracted\$PLUGINSDIR\modern-wizard.bmp"), "再帰取り込み元の $PLUGINSDIR は実在するフォルダー名として保持");
+string literalPayload = Path.Combine(sandbox, "literal.zip");
+await PackageBuilder.CreatePayloadAsync(literalFiles, literalPayload, Console.WriteLine);
+await using (FileStream source = File.OpenRead(literalPayload)) await InstallationEngine.InstallAsync(source, destination);
+Check(await File.ReadAllTextAsync(Path.Combine(destination, "data", "artifacts", "installer-startup-fix", "extracted", "$PLUGINSDIR", "modern-wizard.bmp")) == "literal dollar directory"
+    && await File.ReadAllTextAsync(Path.Combine(destination, "data", "$name.txt")) == "literal dollar file", "$ を含むフォルダー・ファイルをそのまま配置");
+await File.WriteAllTextAsync(script, "Section\nSetOutPath \"$INSTDIR\\$PLUGINSDIR\"\nSectionEnd");
+ExpectInvalid(() => compiler.Compile(script), "無効な配置先", "定義内の未対応変数は引き続き拒否");
+
 await File.WriteAllTextAsync(script, "Name \"App\"\nSection\nExecWait something.exe\nSectionEnd");
 ExpectInvalid(() => compiler.Compile(script), "(3):", "未対応命令を行番号付きで拒否");
 await File.WriteAllTextAsync(script, "Section\nSetOutPath \"$INSTDIR\\..\\outside\"\nSectionEnd");
@@ -51,6 +142,32 @@ Console.WriteLine("PASS: HSIS の定義解析・圧縮・インストール実�
 string videoScript = args.Length > 1 ? args[1] : Path.Combine(root, "tests", "Fixtures", "VideoEditor.nsi");
 if (File.Exists(videoScript))
 {
+    foreach (string newline in new[] { "\r", "\n", "\r\n" })
+    {
+        string input = string.Join(newline, "APP_VERSION=0.1.0", "OUTPUT_FILE=", "SOURCE_DIR=");
+        Dictionary<string, string> parsedInput = DefinitionConstants.ParseValues(input);
+        DefinitionInspection partial = compiler.Inspect(videoScript, parsedInput);
+        Check(parsedInput["APP_VERSION"] == "0.1.0" && partial.Definition.ProductVersion == "0.1.0.0" && partial.MissingConstants.SequenceEqual(new[] { "OUTPUT_FILE", "SOURCE_DIR" }),
+            "WinUI と各改行形式で APP_VERSION のみ入力して再解析できる");
+        Check(DefinitionConstants.AddMissing(input, partial.MissingConstants) == input, "各改行形式で空欄の定数を重複追加しない");
+    }
+    DefinitionInspection initial = compiler.Inspect(videoScript);
+    Check(initial.Definition.Name == "VideoEditor" && initial.MissingConstants.SequenceEqual(new[] { "APP_VERSION", "OUTPUT_FILE", "SOURCE_DIR" }), "ビルド定数未入力でも定義を読み込み、必要な定数を列挙");
+    string blankConstants = DefinitionConstants.AddMissing("", initial.MissingConstants);
+    Dictionary<string, string> blankValues = DefinitionConstants.Parse(blankConstants.Split('\n'));
+    Check(blankValues.Count == 3 && blankValues.Values.All(value => value.Length == 0), "必要な定数を空欄で補完");
+    DefinitionInspection blanks = compiler.Inspect(videoScript, DefinitionConstants.ParseValues(blankConstants));
+    Check(blanks.MissingConstants.SequenceEqual(initial.MissingConstants), "補完した空欄を未指定として読み込み、バージョン解析を失敗させない");
+    string preserved = DefinitionConstants.AddMissing("APP_VERSION=2.3.4", initial.MissingConstants);
+    Check(DefinitionConstants.Parse(preserved.Split('\n'))["APP_VERSION"] == "2.3.4" && DefinitionConstants.AddMissing(preserved, initial.MissingConstants) == preserved, "入力済みの値を保持して定数を重複させない");
+    ExpectInvalid(() => compiler.Compile(videoScript), "APP_VERSION is required", "定義の読み込み後もビルド時は定数を必須にする");
+    Dictionary<string, string> unavailableSource = DefinitionConstants.Parse([
+        "APP_VERSION=1.2.3", "OUTPUT_FILE=Setup.exe", $"SOURCE_DIR=\"{Path.Combine(sandbox, "not-published")}\""
+    ]);
+    DefinitionInspection withoutFiles = compiler.Inspect(videoScript, unavailableSource);
+    Check(withoutFiles.MissingConstants.Count == 0 && withoutFiles.Definition.Version == "1.2.3", "取り込み元未準備でも表示情報を読み込める");
+    Check(unavailableSource["SOURCE_DIR"] == Path.Combine(sandbox, "not-published"), "定数値の外側の引用符を除去");
+    ExpectInvalid(() => compiler.Compile(videoScript, unavailableSource), "not-published", "ビルド時には取り込み元を検証する");
     Dictionary<string, string> defines = new() { ["APP_VERSION"] = "1.2.3", ["SOURCE_DIR"] = Path.Combine(sandbox, "assets"), ["OUTPUT_FILE"] = "VideoEditor-Test.exe" };
     InstallPlan video = compiler.Compile(videoScript, defines);
     Check(video.Definition.Name == "VideoEditor" && video.Definition.Version == "1.2.3", "実際の VideoEditor 定義と外部定数");
@@ -61,21 +178,101 @@ if (File.Exists(videoScript))
     Console.WriteLine("PASS: VideoEditor.nsi の全行を解析（実アプリのインストールは実行しない）");
 }
 
-if (OperatingSystem.IsWindows())
+if (OperatingSystem.IsWindowsVersionAtLeast(6, 1))
 {
+    string applicationExecutable = Path.Combine(sandbox, "Main.exe");
+    File.Copy(Environment.ProcessPath!, applicationExecutable);
+    PackageDefinition iconDefinition = new() { Name = "Main", LaunchExecutable = @"app\Main.exe" };
+    InstallPlan iconPlan = new(iconDefinition, "Setup.exe", [new("missing-helper.exe", @"app\Helper.exe"), new(applicationExecutable, @"app\Main.exe")], []);
+    Check(ApplicationIcon.FindExecutable(iconPlan, iconDefinition) == applicationExecutable, "補助 EXE ではなくインストール対象アプリのアイコンを選ぶ");
+    string iconProject = Path.Combine(sandbox, "IconProject");
+    Directory.CreateDirectory(Path.Combine(iconProject, "Assets"));
+    Directory.CreateDirectory(Path.Combine(iconProject, "installer"));
+    string projectIcon = Path.Combine(iconProject, "Assets", "Main.ico");
+    List<(int Size, byte[] Png)> iconFrames = [];
+    foreach (int frameSize in new[] { 48, 256 })
+    {
+        using System.Drawing.Bitmap bitmap = new(frameSize, frameSize);
+        using System.Drawing.Graphics graphics = System.Drawing.Graphics.FromImage(bitmap);
+        graphics.Clear(frameSize == 256 ? System.Drawing.Color.Lime : System.Drawing.Color.Red);
+        using MemoryStream imageBytes = new();
+        bitmap.Save(imageBytes, System.Drawing.Imaging.ImageFormat.Png);
+        iconFrames.Add((frameSize, imageBytes.ToArray()));
+    }
+    using (FileStream file = File.Create(projectIcon))
+    using (BinaryWriter writer = new(file))
+    {
+        writer.Write((ushort)0); writer.Write((ushort)1); writer.Write((ushort)iconFrames.Count);
+        int imageOffset = 6 + 16 * iconFrames.Count;
+        foreach ((int size, byte[] bytes) in iconFrames)
+        {
+            writer.Write(size == 256 ? (byte)0 : (byte)size); writer.Write(size == 256 ? (byte)0 : (byte)size);
+            writer.Write((byte)0); writer.Write((byte)0); writer.Write((ushort)1); writer.Write((ushort)32);
+            writer.Write(bytes.Length); writer.Write(imageOffset); imageOffset += bytes.Length;
+        }
+        foreach ((int _, byte[] bytes) in iconFrames) writer.Write(bytes);
+    }
+    await File.WriteAllTextAsync(Path.Combine(iconProject, "Main.csproj"), "<Project><PropertyGroup><ApplicationIcon>Assets/Main.ico</ApplicationIcon></PropertyGroup></Project>");
+    string iconScript = Path.Combine(iconProject, "installer", "Main.nsi");
+    await File.WriteAllTextAsync(iconScript, "Name Main");
+    Check(ApplicationIcon.FindIconFile(iconPlan, applicationExecutable, iconScript) == projectIcon, "対象プロジェクトが指定するアプリアイコンを選ぶ");
+    string pngPath = Path.Combine(sandbox, "AppIcon.png");
+    List<string> iconLog = [];
+    Check(ApplicationIcon.TryWrite(iconPlan, iconDefinition, pngPath, iconLog.Add, iconScript) && iconLog.Contains($"アプリアイコン: {projectIcon}"), "独自アイコンのない EXE には汎用アイコンではなくプロジェクトのアイコンを使う");
+    byte[] png = await File.ReadAllBytesAsync(pngPath);
+    Check(png.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }), "アイコンを表示用の PNG として保存");
+    using (System.Drawing.Bitmap decodedIcon = new(pngPath))
+        Check(decodedIcon.Width == 256 && decodedIcon.Height == 256 && decodedIcon.GetPixel(128, 128).G == 255 && decodedIcon.GetPixel(128, 128).R == 0,
+            "48px の画像の拡大ではなく 256px の高解像度フレームを取得");
+    InstallPlan shortcutPlan = PackageBuilder.PreparePlan(iconPlan with
+    {
+        Install = [new("createshortcut", [@"$INSTDIR\Main.lnk", @"$INSTDIR\app\Main.exe"]),
+            new("writeregstr", ["HKCU", @"Software\Microsoft\Windows\CurrentVersion\Uninstall\HSIS.IconTest", "DisplayName", "Main"]),
+            new("writeregstr", ["HKCU", @"Software\Microsoft\Windows\CurrentVersion\Uninstall\HSIS.IconTest", "DisplayIcon", @"$INSTDIR\app\Main.exe"])]
+    }, sandbox);
+    ScriptOperation displayIcon = shortcutPlan.Install.Last(operation => operation.Command == "writeregstr" && operation.Arguments[2] == "DisplayIcon");
+    Check(displayIcon.Arguments[3] == @"$INSTDIR\.hsis\Application.ico", "アプリ一覧のアイコンはアイコンのない EXE ではなく同梱 ICO を参照する");
+    string shortcutRoot = Path.Combine(sandbox, "shortcut-icon");
+    Directory.CreateDirectory(shortcutRoot);
+    foreach (InstallFile file in shortcutPlan.Files.Where(file => file.Destination.EndsWith(".ico", StringComparison.OrdinalIgnoreCase)))
+    {
+        string target = Path.Combine(shortcutRoot, file.Destination);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.Copy(file.Source, target);
+    }
+    RuntimeOperations.Execute(shortcutPlan.Install.Where(operation => operation.Command == "createshortcut"), shortcutRoot, null, null);
+    Type shortcutShellType = Type.GetTypeFromProgID("WScript.Shell")!;
+    object shortcutShell = Activator.CreateInstance(shortcutShellType)!;
+    object? savedShortcut = null;
+    try
+    {
+        dynamic shell = shortcutShell;
+        savedShortcut = shell.CreateShortcut(Path.Combine(shortcutRoot, "Main.lnk"));
+        dynamic link = savedShortcut;
+        string location = link.IconLocation;
+        Check(location == Path.Combine(shortcutRoot, @".hsis\Application.ico") + ",0", "保存したショートカットは同梱アプリアイコンを参照する");
+        using System.Drawing.Icon installedIcon = new(Path.Combine(shortcutRoot, @".hsis\Application.ico"), 256, 256);
+        Check(installedIcon.Width == 256, "ショートカット用 ICO を Windows が読み取れる");
+    }
+    finally
+    {
+        if (savedShortcut is not null) System.Runtime.InteropServices.Marshal.FinalReleaseComObject(savedShortcut);
+        System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shortcutShell);
+    }
     string registryPath = @"Software\HSIS.Tests\" + Guid.NewGuid().ToString("N");
     string operationRoot = Path.Combine(sandbox, "operations");
     string fakeSetup = Path.Combine(sandbox, "FakeSetup.exe");
     await File.WriteAllTextAsync(fakeSetup, "test-only, not executable");
     try
     {
+        using FileStream uninstaller = File.OpenRead(fakeSetup);
         RuntimeOperations.Execute([
             new("createdirectory", ["$INSTDIR"]),
             new("writeuninstaller", [@"$INSTDIR\Uninstall.exe"]),
             new("createshortcut", [@"$INSTDIR\Test.lnk", @"$INSTDIR\Uninstall.exe"]),
             new("writeregstr", ["HKCU", registryPath, "InstallDir", "$INSTDIR"]),
             new("writeregdword", ["HKCU", registryPath, "NoModify", "1"])
-        ], operationRoot, fakeSetup, null);
+        ], operationRoot, uninstaller, null);
         using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(registryPath)!)
             Check((string?)key.GetValue("InstallDir") == operationRoot && (int?)key.GetValue("NoModify") == 1, "レジストリの文字列・DWORD 登録");
         Check(File.Exists(Path.Combine(operationRoot, "Test.lnk")) && await File.ReadAllTextAsync(Path.Combine(operationRoot, "Uninstall.exe")) == "test-only, not executable", "ショートカットとアンインストーラー生成");
