@@ -5,10 +5,10 @@ namespace Hsis.Core;
 
 public static class InstallationEngine
 {
-    public static async Task InstallAsync(Stream payload, string destination, IProgress<string>? progress = null, CancellationToken cancellationToken = default, Stream? uninstaller = null)
+    public static async Task InstallAsync(Stream payload, string destination, IProgress<string>? progress = null, CancellationToken cancellationToken = default, Stream? uninstaller = null, string? runtimeDirectory = null)
     {
         string root = Path.GetFullPath(destination);
-        using PayloadArchive archive = await PayloadArchive.OpenAsync(payload, cancellationToken).ConfigureAwait(false);
+        using PayloadArchive archive = await PayloadArchive.OpenAsync(payload, cancellationToken, runtimeDirectory).ConfigureAwait(false);
         PayloadManifest manifest = archive.Manifest;
         RuntimeOperations.CheckRequirements(manifest.Initialize);
         RunningApplications.EnsureClosed(root);

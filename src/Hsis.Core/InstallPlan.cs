@@ -9,7 +9,11 @@ public sealed record InstallPlan(PackageDefinition Definition, string OutputFile
     public List<ScriptOperation> Uninstall { get; init; } = [];
 }
 public sealed record ScriptOperation(string Command, string[] Arguments);
-public sealed record PayloadFile(string Entry, string Destination);
+public sealed record PayloadFile(string Entry, string Destination)
+{
+    public string? RuntimePath { get; init; }
+    public string? Sha256 { get; init; }
+}
 public sealed record PayloadManifest(List<PayloadFile> Files, List<string> Directories)
 {
     public List<ScriptOperation> Initialize { get; init; } = [];

@@ -80,6 +80,52 @@ List<string> extractionMessages = [];
 await using (FileStream source = File.OpenRead(payload))
     await InstallationEngine.InstallAsync(source, Path.Combine(sandbox, "sevenzip-progress"), new InlineProgress(extractionMessages.Add));
 Check(extractionMessages.Any(message => message.Contains("展開しています")), "展開待ちの案内を通知");
+string sharedRuntime = Path.Combine(sandbox, "shared-runtime");
+Directory.CreateDirectory(Path.Combine(sharedRuntime, "nested"));
+string sharedSource = Path.Combine(sharedRuntime, "nested", "renamed-runtime.dat");
+File.Copy(sample.Files[0].Source, sharedSource);
+string sharedPayload = Path.Combine(sandbox, "Shared.bin");
+await PackageBuilder.CreatePayloadAsync(sample, sharedPayload, Console.WriteLine, runtimeDirectory: sharedRuntime);
+PayloadManifest sharedManifest;
+using (BinaryReader source = new(File.OpenRead(sharedPayload)))
+{
+    Check(source.ReadBytes(8).AsSpan().SequenceEqual("HSIS7Z02"u8), "共通ファイルがある場合だけ共有形式を使う");
+    sharedManifest = System.Text.Json.JsonSerializer.Deserialize<PayloadManifest>(source.ReadBytes(source.ReadInt32()))!;
+}
+Check(sharedManifest.Files[0].RuntimePath == Path.Combine("nested", "renamed-runtime.dat")
+    && sharedManifest.Files[1].RuntimePath is null, "ファイル名ではなく内容でランタイムを共通化する");
+string sharedInstall = Path.Combine(sandbox, "shared-install");
+await using (FileStream source = File.OpenRead(sharedPayload))
+    await InstallationEngine.InstallAsync(source, sharedInstall, runtimeDirectory: sharedRuntime);
+Check(File.ReadAllBytes(Path.Combine(sharedInstall, "hello.txt")).SequenceEqual(File.ReadAllBytes(sample.Files[0].Source))
+    && File.Exists(Path.Combine(sharedInstall, "license.txt")), "共通ファイルとアプリ固有ファイルを一緒に配置できる");
+string onlySharedPayload = Path.Combine(sandbox, "OnlyShared.bin");
+await PackageBuilder.CreatePayloadAsync(sample with { Files = [sample.Files[0]] }, onlySharedPayload, Console.WriteLine, runtimeDirectory: sharedRuntime);
+await using (FileStream source = File.OpenRead(onlySharedPayload))
+    await InstallationEngine.InstallAsync(source, Path.Combine(sandbox, "only-shared-install"), runtimeDirectory: sharedRuntime);
+Check(File.Exists(Path.Combine(sandbox, "only-shared-install", "hello.txt")), "全ファイルが共通の場合は空の 7z を作成・展開しない");
+File.WriteAllText(sharedSource, "modified runtime");
+bool rejectedSharedHash = false;
+string rejectedSharedInstall = Path.Combine(sandbox, "changed-shared-install");
+try
+{
+    await using FileStream source = File.OpenRead(sharedPayload);
+    await InstallationEngine.InstallAsync(source, rejectedSharedInstall, runtimeDirectory: sharedRuntime);
+}
+catch (InvalidDataException ex) when (ex.Message.Contains("内容が一致しません")) { rejectedSharedHash = true; }
+Check(rejectedSharedHash && !Directory.Exists(rejectedSharedInstall), "共通ランタイムの改変を配置開始前に拒否する");
+PayloadManifest outsideManifest = sharedManifest with { Files = [sharedManifest.Files[0] with { RuntimePath = "../outside.dat" }] };
+using MemoryStream outsideShared = new();
+using (BinaryWriter writer = new(outsideShared, Encoding.UTF8, true))
+{
+    byte[] metadata = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(outsideManifest);
+    writer.Write("HSIS7Z02"u8); writer.Write(metadata.Length); writer.Write(metadata);
+}
+outsideShared.Position = 0;
+bool rejectedSharedPath = false;
+try { await InstallationEngine.InstallAsync(outsideShared, Path.Combine(sandbox, "outside-shared-install"), runtimeDirectory: sharedRuntime); }
+catch (InvalidDataException ex) when (ex.Message.Contains("範囲外")) { rejectedSharedPath = true; }
+Check(rejectedSharedPath, "ランタイム外への共有ファイル参照を拒否する");
 string legacyPayload = Path.Combine(sandbox, "Legacy.zip");
 using (System.IO.Compression.ZipArchive legacy = new(File.Create(legacyPayload), System.IO.Compression.ZipArchiveMode.Create))
 {

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Xml.Linq;
+using System.Security.Cryptography;
 
 namespace Hsis.Core;
 
@@ -27,7 +28,6 @@ public sealed class PackageBuilder
             plan = PreparePlan(plan with { Definition = definition }, work);
             definition = plan.Definition;
             string payload = Path.Combine(work, "Payload.bin");
-            await CreatePayloadAsync(plan, payload, log, cancellationToken).ConfigureAwait(false);
             await File.WriteAllTextAsync(Path.Combine(work, "Package.json"), JsonSerializer.Serialize(definition), cancellationToken).ConfigureAwait(false);
             string project = Path.Combine(work, "Source");
             CopyDirectory(template, project);
@@ -56,6 +56,7 @@ public sealed class PackageBuilder
                 "-p:PublishSingleFile=false", $"-p:HsisPackageDirectory={work}", "-p:HsisOutputName=Hsis.Setup"],
                 Path.GetDirectoryName(projectFile)!, log, cancellationToken).ConfigureAwait(false);
             string runtime = Path.Combine(work, "Runtime.7z");
+            await CreatePayloadAsync(plan, payload, log, cancellationToken, staging).ConfigureAwait(false);
             log("共通ランタイムを 7z / LZMA2（高圧縮）で圧縮しています…");
             await SevenZip.CreateAsync(staging, runtime, log, cancellationToken).ConfigureAwait(false);
             string launcher = await NativeLauncher.BuildAsync(project, work, log, cancellationToken).ConfigureAwait(false);
@@ -137,7 +138,7 @@ public sealed class PackageBuilder
         return plan with { Definition = definition, Files = files, Install = install, Uninstall = remove };
     }
 
-    public static async Task CreatePayloadAsync(InstallPlan plan, string output, Action<string> log, CancellationToken cancellationToken = default)
+    public static async Task CreatePayloadAsync(InstallPlan plan, string output, Action<string> log, CancellationToken cancellationToken = default, string? runtimeDirectory = null)
     {
         string staging = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(staging, "files"));
@@ -145,31 +146,59 @@ public sealed class PackageBuilder
         try
         {
             List<PayloadFile> files = [];
+            Dictionary<string, string> runtimeFiles = new(StringComparer.Ordinal);
+            if (runtimeDirectory is not null)
+            {
+                foreach (string runtimeFile in Directory.EnumerateFiles(runtimeDirectory, "*", SearchOption.AllDirectories))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await using FileStream input = File.OpenRead(runtimeFile);
+                    string hash = Convert.ToHexString(await SHA256.HashDataAsync(input, cancellationToken).ConfigureAwait(false));
+                    runtimeFiles.TryAdd(hash, Path.GetRelativePath(runtimeDirectory, runtimeFile));
+                }
+            }
+            long sharedBytes = 0;
+            int storedFiles = 0;
             for (int index = 0; index < plan.Files.Count; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 InstallFile file = plan.Files[index];
                 string entry = $"files/{index}";
                 await using (FileStream input = File.OpenRead(file.Source))
-                await using (FileStream target = File.Create(Path.Combine(staging, entry)))
-                    await input.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+                {
+                    if (runtimeFiles.Count > 0)
+                    {
+                        string hash = Convert.ToHexString(await SHA256.HashDataAsync(input, cancellationToken).ConfigureAwait(false));
+                        if (runtimeFiles.TryGetValue(hash, out string? runtimePath))
+                        {
+                            files.Add(new(entry, file.Destination) { RuntimePath = runtimePath, Sha256 = hash });
+                            sharedBytes += input.Length;
+                            continue;
+                        }
+                        input.Position = 0;
+                    }
+                    await using (FileStream target = File.Create(Path.Combine(staging, entry)))
+                        await input.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+                }
+                storedFiles++;
                 files.Add(new(entry, file.Destination));
                 log($"追加: {file.Source}");
             }
             byte[] metadata = JsonSerializer.SerializeToUtf8Bytes(new PayloadManifest(files, plan.Directories)
                 { Initialize = plan.Initialize, Install = plan.Install, Uninstall = plan.Uninstall });
-            if (files.Count > 0)
+            if (sharedBytes > 0) log($"共通ランタイムから再利用: {files.Count - storedFiles} ファイル、{sharedBytes / (1024.0 * 1024):F2} MiB（圧縮前）");
+            if (storedFiles > 0)
             {
                 log("7z / LZMA2（高圧縮）で圧縮しています…");
                 await SevenZip.CreateAsync(staging, compressed, log, cancellationToken).ConfigureAwait(false);
             }
             await using FileStream stream = File.Create(output);
-            await stream.WriteAsync(PayloadArchive.Magic.ToArray(), cancellationToken).ConfigureAwait(false);
+            await stream.WriteAsync((files.Any(file => file.RuntimePath is not null) ? PayloadArchive.SharedMagic.ToArray() : PayloadArchive.Magic.ToArray()), cancellationToken).ConfigureAwait(false);
             byte[] length = new byte[4];
             System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(length, metadata.Length);
             await stream.WriteAsync(length, cancellationToken).ConfigureAwait(false);
             await stream.WriteAsync(metadata, cancellationToken).ConfigureAwait(false);
-            if (files.Count > 0)
+            if (storedFiles > 0)
             {
                 await using FileStream input = File.OpenRead(compressed);
                 await input.CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
