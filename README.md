@@ -59,11 +59,13 @@ Copy-Item src/Hsis.App/Hsis.ico artifacts/cli/Template/src/Hsis.App/Hsis.ico
 
 ## HSIS 自身のインストーラーをダウンロードする
 
-このリポジトリの **Actions → Build HSIS installer → Run workflow** から実行します。完了後、実行結果の **Artifacts → HSIS-バージョン-win-x64**、または Summary のダウンロードリンクから ZIP を取得してください。成果物の保存期間は30日です。
+バージョンタグ (`vMAJOR.MINOR.PATCH`) を push すると、HSIS 自身でインストーラーをビルドし、GitHub Release にセットアップ EXE と `.sha256` を公開します。このリポジトリの **Releases** からダウンロードしてください。
 
-ZIP を展開して `HSIS-バージョン-win-x64-Setup.exe` を起動します。同梱の `.sha256` で SHA-256 を確認できます。セットアップのファイル名は変更しないでください。既定ではユーザーの `LocalAppData\Programs\HSIS` に Studio、CLI (`hsis.exe`)、生成に必要な `Template` を配置し、スタートメニューに HSIS を追加します。アンインストールは配置先の `Uninstall.exe` から実行できます。
+手動でビルドする場合は **Actions → Build HSIS installer → Run workflow** から実行します。完了後、実行結果の **Artifacts → HSIS-バージョン-win-x64**、または Summary のダウンロードリンクから ZIP を取得してください。成果物の保存期間は30日です。手動実行では GitHub Release を作成しません。
 
-ワークフローは `v*` タグの push でも実行します。タグと `Directory.Build.props` のバージョンが一致しない場合は失敗します。バージョンは入力値で上書きせず、同ファイルを使用します。GitHub Release への公開は行いません。
+Releases から取得した `HSIS-バージョン-win-x64-Setup.exe` を起動します。Actions の成果物を取得した場合は、先に ZIP を展開してください。併せて取得した `.sha256` で SHA-256 を確認できます。セットアップのファイル名は変更しないでください。既定ではユーザーの `LocalAppData\Programs\HSIS` に Studio、CLI (`hsis.exe`)、生成に必要な `Template` を配置し、スタートメニューに HSIS を追加します。アンインストールは配置先の `Uninstall.exe` から実行できます。
+
+タグと `Directory.Build.props` のバージョンが一致しない場合は失敗します。バージョンは入力値で上書きせず、同ファイルを使用します。タグ起動でも Actions の成果物に EXE と `.sha256` を保存します。
 
 ローカルでも、前述の生成環境で次を実行できます。
 

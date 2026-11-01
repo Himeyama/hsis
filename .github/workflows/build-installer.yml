@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*'
+      - 'v*.*.*'
 
 permissions:
   contents: read
@@ -13,6 +13,8 @@ jobs:
   build:
     runs-on: windows-2025
     timeout-minutes: 60
+    permissions:
+      contents: write
     defaults:
       run:
         shell: pwsh
@@ -27,6 +29,9 @@ jobs:
         run: |
           [xml]$props = Get-Content ./Directory.Build.props
           $version = [string]$props.Project.PropertyGroup.Version
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw 'Directory.Build.props must contain a MAJOR.MINOR.PATCH version'
+          }
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -cne "v$version") {
             throw "Tag must match Directory.Build.props: v$version"
           }
@@ -55,3 +60,11 @@ jobs:
           ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
         run: |
           "[Download HSIS $env:HSIS_VERSION installer]($env:ARTIFACT_URL)" >> $env:GITHUB_STEP_SUMMARY
+      - name: Publish GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $installer = "./artifacts/distribution/HSIS-$env:HSIS_VERSION-win-x64-Setup.exe"
+          gh release create $env:GITHUB_REF_NAME $installer "$installer.sha256" --verify-tag --generate-notes --title "HSIS $env:GITHUB_REF_NAME"
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
