@@ -3,7 +3,7 @@
 
 <img width="600" src="https://github.com/user-attachments/assets/52bdb38a-db7e-49c1-9d93-8ef7ab0123f0" />
 
-現在のバージョン: **0.9.1**。運用ルールは `AGENTS.md`、変更履歴は `CHANGELOG.md` を参照してください。
+現在のバージョン: **0.9.2**。運用ルールは `AGENTS.md`、変更履歴は `CHANGELOG.md` を参照してください。
 
 `WriteUninstaller` がない定義にも `Uninstall.exe` を自動生成します。削除定義がない場合、配置ファイルとショートカットを削除し、ユーザーが追加したファイルは残します。レジストリなどの削除は `Section Uninstall` で指定してください。取得した対象アプリのアイコンは `.hsis/Application.ico` に配置し、アプリのショートカットから参照します。
 
@@ -292,6 +292,13 @@ WPF 画面の検証（保存先チェック・利用規約の同意・削除モ�
 ```powershell
 dotnet build tests/Hsis.WpfChecks -c Release -m:1
 ./tests/Hsis.WpfChecks/bin/Release/net9.0-windows/win-x64/Hsis.WpfChecks.exe
+```
+
+workflow では `--ci` を付け、ウィンドウを表示せずに画面遷移・同意・保存先・中止確認・削除モードをライト／ダーク両方で検証します。画面撮影と実際のキーボードフォーカスの確認はローカル実行時に行います。
+
+```powershell
+./tests/Hsis.WpfChecks/bin/Release/net9.0-windows/win-x64/Hsis.WpfChecks.exe --ci
+./tests/Hsis.WpfChecks/bin/Release/net9.0-windows/win-x64/Hsis.WpfChecks.exe --ci --dark
 ```
 
 単一 EXE の初回起動確認:

@@ -46,16 +46,16 @@ jobs:
           "HSIS_7ZIP_PATH=$sevenZip" >> $env:GITHUB_ENV
           dotnet run --project tests/Hsis.Checks -c Release -- .
           if ($LASTEXITCODE -ne 0) { throw 'HSIS checks failed' }
-      - name: Build HSIS with HSIS
-        run: ./build-installer.ps1
-      - name: Check WPF Fluent screens
+      - name: Check WPF Fluent behavior without a desktop
         run: |
           dotnet build tests/Hsis.WpfChecks -c Release -m:1
           if ($LASTEXITCODE -ne 0) { throw 'WPF checks build failed' }
-          ./tests/Hsis.WpfChecks/bin/Release/net9.0-windows/win-x64/Hsis.WpfChecks.exe
+          ./tests/Hsis.WpfChecks/bin/Release/net9.0-windows/win-x64/Hsis.WpfChecks.exe --ci
           if ($LASTEXITCODE -ne 0) { throw 'WPF light theme checks failed' }
-          ./tests/Hsis.WpfChecks/bin/Release/net9.0-windows/win-x64/Hsis.WpfChecks.exe --dark
+          ./tests/Hsis.WpfChecks/bin/Release/net9.0-windows/win-x64/Hsis.WpfChecks.exe --ci --dark
           if ($LASTEXITCODE -ne 0) { throw 'WPF dark theme checks failed' }
+      - name: Build HSIS with HSIS
+        run: ./build-installer.ps1
       - name: Upload installer and checksum
         id: upload
         uses: actions/upload-artifact@v4
