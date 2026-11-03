@@ -29,6 +29,9 @@ try {
         }
     }
 
+    # Exercise the published single-file Studio, not only the test host's WPF resources.
+    & "$PSScriptRoot/tests/Check-SetupStartup.ps1" -SetupPath (Join-Path $payload 'Hsis.App.exe') -ExpectedTitle 'HSIS Studio' -ColdStart
+
     & (Join-Path $cli 'hsis.exe') build ./installer/HSIS.nsi --output (Join-Path $work 'installer') "-DAPP_VERSION=$version" "-DSOURCE_DIR=$payload"
     if ($LASTEXITCODE -ne 0) { throw 'HSIS installer generation failed.' }
     $installers = @(Get-ChildItem -Path "$work/installer/Setup-*/HSIS-$version-win-x64-Setup.exe" -File)
