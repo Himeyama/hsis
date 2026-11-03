@@ -50,21 +50,16 @@ public sealed class PackageBuilder
             InstallPlan uninstallPlan = plan with { Files = [], Directories = [], Install = [] };
             await CreatePayloadAsync(uninstallPlan, Path.Combine(work, "UninstallerPayload.bin"), log, cancellationToken).ConfigureAwait(false);
             string staging = Path.Combine(work, "Published");
-            string uninstallStaging = Path.Combine(work, "Uninstaller");
-            log("WPF Fluent のアンインストーラーを生成しています…");
-            await ProcessRunner.RunAsync("dotnet", ["publish", projectFile, "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", uninstallStaging,
-                $"-p:HsisPackageDirectory={work}", "-p:HsisOutputName=Hsis.Uninstall", "-p:HsisUninstaller=true"],
-                Path.GetDirectoryName(projectFile)!, log, cancellationToken).ConfigureAwait(false);
-            log("WPF Fluent のセットアップを生成しています…");
+            log("セットアップと削除画面で共用する WPF Fluent EXE を生成しています…");
             await ProcessRunner.RunAsync("dotnet", ["publish", projectFile, "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", staging,
-                $"-p:HsisPackageDirectory={work}", "-p:HsisOutputName=Hsis.Setup", "-p:HsisUninstaller=false"],
+                $"-p:HsisPackageDirectory={work}", "-p:HsisOutputName=Hsis.Setup"],
                 Path.GetDirectoryName(projectFile)!, log, cancellationToken).ConfigureAwait(false);
             await CreatePayloadAsync(plan, payload, log, cancellationToken).ConfigureAwait(false);
             string destination = Path.Combine(Path.GetFullPath(output), $"Setup-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..6]}");
             Directory.CreateDirectory(destination);
             string setup = Path.Combine(destination, outputName);
             File.Copy(Path.Combine(staging, "Hsis.Setup.exe"), setup);
-            await SetupArchive.AppendAsync(setup, payload, Path.Combine(uninstallStaging, "Hsis.Uninstall.exe"), cancellationToken).ConfigureAwait(false);
+            await SetupArchive.AppendSharedAsync(setup, payload, cancellationToken).ConfigureAwait(false);
             log($"作成完了: {setup}");
             return setup;
         }

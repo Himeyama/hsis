@@ -13,8 +13,9 @@ public static class Program
         // Wait for the installed process to exit before initializing WPF,
         // so the temporary copy can remove the original executable.
         int rootArgument = Array.IndexOf(args, "--uninstall");
-        if (rootArgument < 0 && Assembly.GetExecutingAssembly().GetCustomAttributes<AssemblyMetadataAttribute>()
-            .Any(attribute => attribute.Key == "Hsis.Uninstaller" && attribute.Value == "true"))
+        if (rootArgument < 0 && (SetupArchive.IsUninstaller(Environment.ProcessPath!)
+            || Assembly.GetExecutingAssembly().GetCustomAttributes<AssemblyMetadataAttribute>()
+                .Any(attribute => attribute.Key == "Hsis.Uninstaller" && attribute.Value == "true")))
         {
             using Stream resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("Hsis.Package.json")
                 ?? throw new InvalidDataException("セットアップ情報がありません。");

@@ -152,6 +152,31 @@ using (System.IO.Compression.ZipArchive legacy = new(File.Create(legacyPayload),
 await using (FileStream source = File.OpenRead(legacyPayload))
     await InstallationEngine.InstallAsync(source, Path.Combine(sandbox, "legacy-install"));
 Check(true, "従来の ZIP パッケージも読み込める");
+string sharedSetup = Path.Combine(sandbox, "SharedSetup.exe");
+byte[] sharedBundle = "single WPF runtime bundle"u8.ToArray();
+await File.WriteAllBytesAsync(sharedSetup, sharedBundle);
+await SetupArchive.AppendSharedAsync(sharedSetup, payload);
+Check(new FileInfo(sharedSetup).Length == sharedBundle.Length + new FileInfo(payload).Length + 32
+    && !SetupArchive.IsUninstaller(sharedSetup), "WPF ランタイムを一度だけ格納する");
+using (Stream sharedData = SetupArchive.OpenPayload(sharedSetup))
+    await InstallationEngine.InstallAsync(sharedData, Path.Combine(sandbox, "shared-bundle-install"));
+Check(File.Exists(Path.Combine(sandbox, "shared-bundle-install", "hello.txt")), "共有 EXE 形式からアプリを配置できる");
+string sharedUninstall = Path.Combine(sandbox, "SharedUninstall.exe");
+using (Stream generated = SetupArchive.OpenUninstaller(sharedSetup)!)
+await using (FileStream target = File.Create(sharedUninstall)) await generated.CopyToAsync(target);
+byte[] sharedUninstallBytes = await File.ReadAllBytesAsync(sharedUninstall);
+Check(sharedUninstallBytes.Length == sharedBundle.Length + 32 && sharedUninstallBytes.AsSpan(0, sharedBundle.Length).SequenceEqual(sharedBundle)
+    && SetupArchive.IsUninstaller(sharedUninstall) && SetupArchive.OpenUninstaller(sharedUninstall) is null,
+    "削除用 EXE は同じランタイムから生成しアプリ本体を含めない");
+ExpectInvalid(() => SetupArchive.OpenPayload(sharedUninstall).Dispose(), "ありません", "削除用 EXE からインストールデータは読み出さない");
+string corruptShared = Path.Combine(sandbox, "CorruptShared.exe");
+byte[] corruptSharedBytes = await File.ReadAllBytesAsync(sharedSetup);
+System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(corruptSharedBytes.AsSpan(corruptSharedBytes.Length - 24), long.MaxValue);
+await File.WriteAllBytesAsync(corruptShared, corruptSharedBytes);
+ExpectInvalid(() => SetupArchive.OpenPayload(corruptShared).Dispose(), "範囲", "共有 EXE の不正なデータ範囲を拒否");
+System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(sharedUninstallBytes.AsSpan(sharedUninstallBytes.Length - 8), 7);
+await File.WriteAllBytesAsync(corruptShared, sharedUninstallBytes);
+ExpectInvalid(() => SetupArchive.IsUninstaller(corruptShared), "範囲", "共有 EXE の不正なモードを拒否");
 string nativeOverlay = Path.Combine(sandbox, "NativeOverlay.exe");
 string runtimeArchive = Path.Combine(sandbox, "Runtime.7z");
 await File.WriteAllBytesAsync(nativeOverlay, "native prefix"u8.ToArray());
