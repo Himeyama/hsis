@@ -1,9 +1,9 @@
 # HSIS
 インストーラー作成アプリ
 
-<img width="600" src="https://github.com/user-attachments/assets/52bdb38a-db7e-49c1-9d93-8ef7ab0123f0" />
+<img width="600" src="https://github.com/user-attachments/assets/6e9dd7e8-513f-4cfa-87d7-1fb8c2e9608d" />
 
-現在のバージョン: **0.9.2**。運用ルールは `AGENTS.md`、変更履歴は `CHANGELOG.md` を参照してください。
+運用ルールは `AGENTS.md`、変更履歴は `CHANGELOG.md` を参照してください。
 
 `WriteUninstaller` がない定義にも `Uninstall.exe` を自動生成します。削除定義がない場合、配置ファイルとショートカットを削除し、ユーザーが追加したファイルは残します。レジストリなどの削除は `Section Uninstall` で指定してください。取得した対象アプリのアイコンは `.hsis/Application.ico` に配置し、アプリのショートカットから参照します。
 
@@ -55,7 +55,7 @@ dotnet restore src/Hsis.App/Hsis.App.csproj -p:Platform=x64 -p:NuGetAudit=true -
 
 ```powershell
 dotnet publish src/Hsis.Cli/Hsis.Cli.csproj -c Release -r win-x64 --self-contained true -o artifacts/cli
-# v0.4.4 の CLI テンプレートに元のアイコンを補います。
+# CLI テンプレートに元のアイコンを補います。
 Copy-Item src/Hsis.App/Hsis.ico artifacts/cli/Template/src/Hsis.App/Hsis.ico
 .\artifacts\cli\hsis.exe build .\samples\HelloApp\installer.nsi
 ```
@@ -132,7 +132,7 @@ Studio と CLI を発行し、その CLI が `installer/HSIS.nsi` を処理し�
 
 ## GitHub Actions で使用する
 
-VideoEditor で確認した、HSIS **v0.4.4** を使用する例です。アプリと HSIS を別々のフォルダーへチェックアウトし、CLI をビルドして既存の `.nsi` からインストーラーを生成します。NSIS のインストールは不要です。
+HSIS を使用する例です。アプリと HSIS を別々のフォルダーへチェックアウトし、CLI をビルドして既存の `.nsi` からインストーラーを生成します。NSIS のインストールは不要です。
 
 次の例を対象アプリの `.github/workflows/installer.yml` に保存します。アプリ側に `build.ps1` と `installer/VideoEditor.nsi` があることを前提としています。別のアプリでは、アプリの発行コマンド、定義ファイル名、出力ファイル名を変更してください。`build.ps1` は VideoEditor の発行スクリプトで、HSIS に含まれるものではありません。
 
@@ -211,9 +211,9 @@ jobs:
           if-no-files-found: error
 ```
 
-`APP_VERSION`、`SOURCE_DIR`、`OUTPUT_FILE` は、この例の `.nsi` が使用するビルド定数です。HSIS 固有の必須定数ではありません。アプリのバージョンは入力値から設定し、使用する HSIS のバージョンは `ref: v0.4.4` で固定します。
+`APP_VERSION`、`SOURCE_DIR`、`OUTPUT_FILE` は、この例の `.nsi` が使用するビルド定数です。HSIS 固有の必須定数ではありません。アプリのバージョンは入力値から設定し、使用する HSIS のバージョンは `ref: v*.*.*` で固定します。
 
-v0.4.4 では CLI の `Template` に `Hsis.ico` が含まれないため、同じタグの元アセットをコピーしています。`hsis.exe` と `Template` は一緒に保持してください。生成物は `artifacts/installer/Setup-日時-識別子/` に保存されます。生成した EXE の名前は変更せず、出力フォルダーごと配布してください。
+CLI の `Template` に `Hsis.ico` が含まれないため、同じタグの元アセットをコピーしています。`hsis.exe` と `Template` は一緒に保持してください。生成物は `artifacts/installer/Setup-日時-識別子/` に保存されます。生成した EXE の名前は変更せず、出力フォルダーごと配布してください。
 
 この例は手動実行で Artifacts に保存します。GitHub Release へ公開する場合は、タグ起動の条件と公開ステップを追加し、そのジョブに `contents: write` を設定してください。
 
