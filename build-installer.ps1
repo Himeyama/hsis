@@ -23,7 +23,7 @@ try {
 
     # Studio and CLI share the same current-source Template and .NET runtime.
     Copy-Item -Path "$cli/*" -Destination $payload -Recurse -Force
-    foreach ($required in @('Hsis.App.exe', 'hsis.exe', 'Template/src/Hsis.App/Hsis.ico', 'Template/src/Hsis.Bootstrap/Bootstrap.cpp')) {
+    foreach ($required in @('Hsis.App.exe', 'hsis.exe', 'Template/src/Hsis.App/Hsis.ico')) {
         if (-not (Test-Path -LiteralPath (Join-Path $payload $required) -PathType Leaf)) {
             throw "Missing installer payload: $required"
         }
@@ -37,7 +37,7 @@ try {
     $distribution = Join-Path $PSScriptRoot 'artifacts/distribution'
     New-Item -ItemType Directory -Path $distribution -Force | Out-Null
     $installer = $installers[0]
-    # Preserve the generated filename, which is used by the native launcher.
+    # Preserve the filename selected by the installer definition.
     Copy-Item -LiteralPath $installer.FullName -Destination $distribution -Force
     $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $($installer.Name)" | Set-Content -LiteralPath (Join-Path $distribution "$($installer.Name).sha256") -Encoding ascii

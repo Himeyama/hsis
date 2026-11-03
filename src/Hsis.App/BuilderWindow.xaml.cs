@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Hsis.Core;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
+using System.Windows;
 
 namespace Hsis.App;
 
@@ -16,10 +15,9 @@ public sealed partial class BuilderWindow : Window
     {
         InitializeComponent();
         WindowTools.Configure(this);
-        WindowTools.UseCustomTitleBar(this, AppTitleBar);
         OutputPath.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "HSIS", "Output");
         InstallPath.Text = @"$LOCALAPPDATA\Programs\My Application";
-        AppWindow.Closing += (_, e) => { if (_building) e.Cancel = true; };
+        Closing += (_, e) => { if (_building) e.Cancel = true; };
     }
     private async void PickScript_Click(object sender, RoutedEventArgs e)
     {
@@ -58,7 +56,6 @@ public sealed partial class BuilderWindow : Window
         _definitionReady = false;
         _loadedInputs = null;
         Status.Text = "定義を読み込めませんでした";
-        DefinitionNotice.Severity = InfoBarSeverity.Error;
         DefinitionNotice.Title = "定義を読み込めませんでした";
         DefinitionDetails.Text = error.Message;
         DefinitionNotice.IsOpen = true;
@@ -92,7 +89,7 @@ public sealed partial class BuilderWindow : Window
                 License = LicenseText.Text, LaunchExecutable = LaunchPath.Text.Trim(), RequiresAdministrator = AdminRequired.IsChecked == true
             };
             _setup = await new PackageBuilder().BuildAsync(script, output, Path.Combine(AppContext.BaseDirectory, "Template"), definition,
-                line => DispatcherQueue.TryEnqueue(() => BuildLog.Text += line + Environment.NewLine), defines: defines);
+                line => Dispatcher.InvokeAsync(() => BuildLog.Text += line + Environment.NewLine), defines: defines);
             Status.Text = "作成完了。セットアップを起動して確認できます。";
             OpenSetup.IsEnabled = true;
         }

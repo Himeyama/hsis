@@ -20,10 +20,10 @@ try {
     Start-Sleep -Seconds 2
     $waiting.Refresh()
     if ($waiting.HasExited) { throw "Uninstaller exited before parent wait: $($waiting.ExitCode)" }
-    if ($waiting.Modules.ModuleName -contains 'Microsoft.WindowsAppRuntime.dll') {
-        throw 'Windows App Runtime loaded before the uninstaller handoff completed.'
+    if ($waiting.MainWindowHandle -ne 0 -or @($waiting.Modules.ModuleName | Where-Object { $_ -match 'PresentationNative|wpfgfx|Microsoft.WindowsAppRuntime' }).Count -ne 0) {
+        throw 'UI loaded before the uninstaller handoff completed.'
     }
-    Write-Host 'PASS: parent wait does not load Windows App Runtime'
+    Write-Host 'PASS: parent wait does not initialize the UI'
 }
 finally {
     if (!$waiting.HasExited) { $waiting.Kill(); $waiting.WaitForExit() }

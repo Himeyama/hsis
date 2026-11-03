@@ -1,35 +1,24 @@
 using System.Reflection;
 using System.Text.Json;
 using Hsis.Core;
-using Microsoft.UI.Xaml;
+using System.Windows;
 
 namespace Hsis.App;
 
 public partial class App : Application
 {
     private Window? _window;
-    public App() => InitializeComponent();
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override void OnStartup(StartupEventArgs args)
     {
+        base.OnStartup(args);
         using Stream? resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("Hsis.Package.json");
-        if (resource is null) { _window = new BuilderWindow(); _window.Activate(); return; }
+        if (resource is null) { _window = new BuilderWindow(); _window.Show(); return; }
         PackageDefinition definition = JsonSerializer.Deserialize<PackageDefinition>(resource) ?? throw new InvalidDataException("セットアップ情報を読み込めません。");
         string[] arguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
         string? uninstallDirectory = null;
         int rootArgument = Array.IndexOf(arguments, "--uninstall");
         if (rootArgument >= 0 && rootArgument + 1 < arguments.Length) uninstallDirectory = Path.GetFullPath(arguments[rootArgument + 1]);
         _window = new InstallerWindow(definition, uninstallDirectory);
-        string[] startupArguments = Environment.GetCommandLineArgs();
-        int ready = Array.IndexOf(startupArguments, "--startup-event");
-        if (ready >= 0 && ready + 1 < startupArguments.Length && _window.Content is FrameworkElement content)
-        {
-            // Keep the native preparing window until XAML is loaded and its UI queue is running.
-            content.Loaded += (_, _) => _window.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-            {
-                using EventWaitHandle signal = EventWaitHandle.OpenExisting(startupArguments[ready + 1]);
-                signal.Set();
-            });
-        }
-        _window.Activate();
+        _window.Show();
     }
 }

@@ -6,7 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Hsis.Core/Hsis.Core.csproj" />
-    <Content Include="../Hsis.Bootstrap/**/*" Link="Template/src/Hsis.Bootstrap/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../Directory.Build.props" Link="Template/Directory.Build.props" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../Hsis.Core/*.cs;../Hsis.Core/*.csproj" Link="Template/src/Hsis.Core/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../Hsis.App/*.cs;../Hsis.App/*.xaml;../Hsis.App/*.csproj;../Hsis.App/app.manifest;../Hsis.App/Hsis.ico" Link="Template/src/Hsis.App/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

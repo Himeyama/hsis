@@ -50,22 +50,21 @@ public sealed class PackageBuilder
             InstallPlan uninstallPlan = plan with { Files = [], Directories = [], Install = [] };
             await CreatePayloadAsync(uninstallPlan, Path.Combine(work, "UninstallerPayload.bin"), log, cancellationToken).ConfigureAwait(false);
             string staging = Path.Combine(work, "Published");
-            log("共通のセットアップ画面とランタイムを生成しています…");
-            // One UI/runtime serves both modes. Keep the compiled WinUI filename intact.
-            await ProcessRunner.RunAsync("dotnet", ["publish", projectFile, "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", staging,
-                "-p:PublishSingleFile=false", $"-p:HsisPackageDirectory={work}", "-p:HsisOutputName=Hsis.Setup"],
+            string uninstallStaging = Path.Combine(work, "Uninstaller");
+            log("WPF Fluent のアンインストーラーを生成しています…");
+            await ProcessRunner.RunAsync("dotnet", ["publish", projectFile, "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", uninstallStaging,
+                $"-p:HsisPackageDirectory={work}", "-p:HsisOutputName=Hsis.Uninstall", "-p:HsisUninstaller=true"],
                 Path.GetDirectoryName(projectFile)!, log, cancellationToken).ConfigureAwait(false);
-            string runtime = Path.Combine(work, "Runtime.7z");
-            await CreatePayloadAsync(plan, payload, log, cancellationToken, staging).ConfigureAwait(false);
-            log("共通ランタイムを 7z / LZMA2（高圧縮）で圧縮しています…");
-            await SevenZip.CreateAsync(staging, runtime, log, cancellationToken).ConfigureAwait(false);
-            string launcher = await NativeLauncher.BuildAsync(project, work, log, cancellationToken).ConfigureAwait(false);
+            log("WPF Fluent のセットアップを生成しています…");
+            await ProcessRunner.RunAsync("dotnet", ["publish", projectFile, "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", staging,
+                $"-p:HsisPackageDirectory={work}", "-p:HsisOutputName=Hsis.Setup", "-p:HsisUninstaller=false"],
+                Path.GetDirectoryName(projectFile)!, log, cancellationToken).ConfigureAwait(false);
+            await CreatePayloadAsync(plan, payload, log, cancellationToken).ConfigureAwait(false);
             string destination = Path.Combine(Path.GetFullPath(output), $"Setup-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..6]}");
             Directory.CreateDirectory(destination);
             string setup = Path.Combine(destination, outputName);
-            File.Copy(launcher, setup);
-            int depth = (Path.GetDirectoryName(definition.Uninstaller) ?? "").Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries).Length;
-            await SetupArchive.AppendNativeAsync(setup, runtime, payload, depth, cancellationToken).ConfigureAwait(false);
+            File.Copy(Path.Combine(staging, "Hsis.Setup.exe"), setup);
+            await SetupArchive.AppendAsync(setup, payload, Path.Combine(uninstallStaging, "Hsis.Uninstall.exe"), cancellationToken).ConfigureAwait(false);
             log($"作成完了: {setup}");
             return setup;
         }

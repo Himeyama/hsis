@@ -30,7 +30,7 @@ if (args is ["--exercise-generated-setup", string generatedSetup])
     await launcher.WaitForExitAsync();
     System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
     while (Directory.Exists(installRoot) && watch.Elapsed.TotalSeconds < 60) await Task.Delay(100);
-    Check(!Directory.Exists(installRoot), "ネイティブ起動から無人アンインストールし自身も削除");
+    Check(!Directory.Exists(installRoot), "生成 EXE から無人アンインストールし自身も削除");
     return;
 }
 if (args is ["--extract-icon", string executablePath, string scriptPath, string iconOutput])
@@ -296,7 +296,7 @@ if (File.Exists(videoScript))
         Dictionary<string, string> parsedInput = DefinitionConstants.ParseValues(input);
         DefinitionInspection partial = compiler.Inspect(videoScript, parsedInput);
         Check(parsedInput["APP_VERSION"] == "0.1.0" && partial.Definition.ProductVersion == "0.1.0.0" && partial.MissingConstants.SequenceEqual(new[] { "OUTPUT_FILE", "SOURCE_DIR" }),
-            "WinUI と各改行形式で APP_VERSION のみ入力して再解析できる");
+            "GUI と各改行形式で APP_VERSION のみ入力して再解析できる");
         Check(DefinitionConstants.AddMissing(input, partial.MissingConstants) == input, "各改行形式で空欄の定数を重複追加しない");
     }
     DefinitionInspection initial = compiler.Inspect(videoScript);

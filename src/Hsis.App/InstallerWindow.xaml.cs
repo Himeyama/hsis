@@ -1,10 +1,9 @@
 using System.Diagnostics;
 using System.Reflection;
 using Hsis.Core;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media.Imaging;
-using Microsoft.UI.Xaml.Controls;
-using Windows.Storage.Streams;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media.Imaging;
 
 namespace Hsis.App;
 
@@ -17,14 +16,13 @@ public sealed partial class InstallerWindow : Window
     private readonly string? _uninstallDirectory;
     private bool _confirmingClose;
     private bool _allowClose;
+    private IInputElement? _previousFocus;
     public InstallerWindow(PackageDefinition definition, string? uninstallDirectory = null)
     {
         _definition = definition;
         _uninstallDirectory = uninstallDirectory;
         InitializeComponent();
         WindowTools.Configure(this);
-        WindowTools.UseCustomTitleBar(this, AppTitleBar);
-        WindowTools.ResizeForDisplayScale(this, 640, 480);
         Title = $"{definition.Name} セットアップ";
         AppName.Text = definition.Name;
         VersionLabel.Text = definition.Version;
@@ -36,37 +34,40 @@ public sealed partial class InstallerWindow : Window
         {
             Title = $"{definition.Name} アンインストール";
             WelcomeTitle.Text = "アンインストール";
+            CompleteTitle.Text = "アンインストールが完了しました";
             CompleteText.Text = "アンインストールが完了しました。";
             ProgressTitle.Text = "アンインストールしています";
             LaunchApp.Visibility = Visibility.Collapsed;
         }
-        AppWindow.Closing += async (_, e) =>
+        Closing += (_, e) =>
         {
             if (_allowClose || _page == 4) return;
             e.Cancel = true;
-            if (!_installing) await ConfirmCloseAsync();
+            if (!_installing) ConfirmClose();
+        };
+        PreviewKeyDown += (_, e) =>
+        {
+            if (_confirmingClose && e.Key == Key.Escape)
+            {
+                DismissCloseConfirmation();
+                e.Handled = true;
+            }
         };
         ShowPage();
-        _ = LoadIconAsync();
+        LoadIcon();
     }
-    private async Task LoadIconAsync()
+    private void LoadIcon()
     {
         try
         {
             using Stream? icon = Assembly.GetExecutingAssembly().GetManifestResourceStream("Hsis.AppIcon.png");
             if (icon is null) return;
-            using InMemoryRandomAccessStream imageStream = new();
-            using MemoryStream buffer = new();
-            await icon.CopyToAsync(buffer);
-            using (DataWriter writer = new(imageStream))
-            {
-                writer.WriteBytes(buffer.ToArray());
-                await writer.StoreAsync();
-                writer.DetachStream();
-            }
-            imageStream.Seek(0);
             BitmapImage image = new();
-            await image.SetSourceAsync(imageStream);
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.StreamSource = icon;
+            image.EndInit();
+            image.Freeze();
             ProductIcon.Source = image;
             ProductIcon.Visibility = Visibility.Visible;
             FallbackIcon.Visibility = Visibility.Collapsed;
@@ -91,22 +92,29 @@ public sealed partial class InstallerWindow : Window
     }
     private void Agreement_Changed(object sender, RoutedEventArgs e) { if (_page == 1) NextButton.IsEnabled = Agreement.IsChecked == true; }
     private void Back_Click(object sender, RoutedEventArgs e) { _page = _page == 2 && string.IsNullOrWhiteSpace(_definition.License) ? 0 : _page - 1; ShowPage(); }
-    private async void Cancel_Click(object sender, RoutedEventArgs e) => await ConfirmCloseAsync();
-    private async Task ConfirmCloseAsync()
+    private void Cancel_Click(object sender, RoutedEventArgs e) => ConfirmClose();
+    private void ConfirmClose()
     {
         if (_installing || _confirmingClose) return;
         _confirmingClose = true;
-        try
-        {
-            ContentDialog dialog = new()
-            {
-                XamlRoot = Content.XamlRoot,
-                Title = _uninstallDirectory is null ? "セットアップを中止しますか？" : "アンインストールを中止しますか？",
-                PrimaryButtonText = "中止する", CloseButtonText = "続ける", DefaultButton = ContentDialogButton.Close
-            };
-            if (await dialog.ShowAsync() == ContentDialogResult.Primary) { _allowClose = true; Close(); }
-        }
-        finally { _confirmingClose = false; }
+        _previousFocus = Keyboard.FocusedElement;
+        CloseConfirmationTitle.Text = _uninstallDirectory is null ? "セットアップを中止しますか？" : "アンインストールを中止しますか？";
+        SetupContent.IsEnabled = false;
+        CloseConfirmation.Visibility = Visibility.Visible;
+        ContinueButton.Focus();
+    }
+    private void Continue_Click(object sender, RoutedEventArgs e) => DismissCloseConfirmation();
+    private void DismissCloseConfirmation()
+    {
+        CloseConfirmation.Visibility = Visibility.Collapsed;
+        SetupContent.IsEnabled = true;
+        _confirmingClose = false;
+        if (_previousFocus is not null) Keyboard.Focus(_previousFocus);
+    }
+    private void Abort_Click(object sender, RoutedEventArgs e)
+    {
+        _allowClose = true;
+        Close();
     }
     private async void Browse_Click(object sender, RoutedEventArgs e)
     {

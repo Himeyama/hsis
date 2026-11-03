@@ -1,11 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using Hsis.Core;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
 
 namespace Hsis.App;
 
@@ -14,8 +10,8 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        // Complete the process handoff before creating the WinUI application.
-        // Awaiting the parent in OnLaunched leaves WinUI without a window.
+        // Wait for the installed process to exit before initializing WPF,
+        // so the temporary copy can remove the original executable.
         int rootArgument = Array.IndexOf(args, "--uninstall");
         if (rootArgument < 0 && Assembly.GetExecutingAssembly().GetCustomAttributes<AssemblyMetadataAttribute>()
             .Any(attribute => attribute.Key == "Hsis.Uninstaller" && attribute.Value == "true"))
@@ -60,30 +56,10 @@ public static class Program
         StartApplication();
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
     private static void StartApplication()
     {
-        // Keep the SDK's single-file base-directory setup, but run it only in
-        // the UI process, after the original uninstaller has exited.
-        Environment.SetEnvironmentVariable("MICROSOFT_WINDOWSAPPRUNTIME_BASE_DIRECTORY", AppContext.BaseDirectory);
-        Environment.SetEnvironmentVariable("MICROSOFT_WINDOWSAPPRUNTIME_BASE_DIRECTORY_PID",
-            Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        Marshal.ThrowExceptionForHR(WindowsAppRuntime_EnsureIsLoaded());
-        RunApplication();
-    }
-
-    [DllImport("Microsoft.WindowsAppRuntime.dll", ExactSpelling = true)]
-    private static extern int WindowsAppRuntime_EnsureIsLoaded();
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void RunApplication()
-    {
-        WinRT.ComWrappersSupport.InitializeComWrappers();
-        Application.Start(parameters =>
-        {
-            DispatcherQueueSynchronizationContext context = new(DispatcherQueue.GetForCurrentThread());
-            SynchronizationContext.SetSynchronizationContext(context);
-            _ = new App();
-        });
+        App application = new();
+        application.InitializeComponent();
+        application.Run();
     }
 }

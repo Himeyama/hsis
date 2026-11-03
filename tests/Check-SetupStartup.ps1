@@ -38,11 +38,13 @@ try {
     while ($timer.Elapsed.TotalSeconds -lt 45) {
         $testProcess.Refresh()
         if ($testProcess.HasExited) { throw "Setup exited before opening its window: $($testProcess.ExitCode)" }
+        if ($testProcess.MainWindowTitle.EndsWith('準備しています')) { throw 'The WPF setup must open without the preparing window.' }
         if ($testProcess.MainWindowHandle -ne 0 -and $testProcess.MainWindowTitle -eq $ExpectedTitle) {
             $startupMilliseconds = $timer.ElapsedMilliseconds
             Start-Sleep -Seconds 1
             $testProcess.Refresh()
             if ($testProcess.HasExited) { throw 'Setup exited immediately after opening its window.' }
+            if ($testProcess.Modules.ModuleName -contains 'Microsoft.WindowsAppRuntime.dll') { throw 'The WPF setup must not load Windows App Runtime.' }
             $extractedBytes = 0
             if ($extractionDirectory) { $extractedBytes = (Get-ChildItem -LiteralPath $extractionDirectory -Recurse -File | Measure-Object Length -Sum).Sum }
             $report = [pscustomobject]@{ Executable=$executable; StartupMilliseconds=$startupMilliseconds; ColdStart=[bool]$ColdStart; ExtractedBytes=$extractedBytes }

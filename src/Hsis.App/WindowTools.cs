@@ -1,57 +1,45 @@
-using Microsoft.UI.Xaml;
-using System.Runtime.InteropServices;
-using Windows.Graphics;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media.Imaging;
+using System.Windows.Shell;
+using Microsoft.Win32;
 
 namespace Hsis.App;
 
 internal static class WindowTools
 {
-    [DllImport("user32.dll", ExactSpelling = true)]
-    private static extern uint GetDpiForWindow(nint window);
-
-    public static void ResizeForDisplayScale(Window window, int width, int height)
-    {
-        double scale = GetDpiForWindow(WindowNative.GetWindowHandle(window)) / 96.0;
-        window.AppWindow.Resize(new SizeInt32(
-            (int)Math.Round(width * scale),
-            (int)Math.Round(height * scale)));
-    }
-
-    public static void UseCustomTitleBar(Window window, FrameworkElement titleBar)
-    {
-        window.ExtendsContentIntoTitleBar = true;
-        window.SetTitleBar(titleBar);
-        window.AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
-        window.AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
-        void UpdateColors()
-        {
-            window.AppWindow.TitleBar.ButtonForegroundColor = titleBar.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
-            window.AppWindow.TitleBar.ButtonInactiveForegroundColor = Microsoft.UI.Colors.Gray;
-        }
-        titleBar.ActualThemeChanged += (_, _) => UpdateColors();
-        UpdateColors();
-    }
     public static void Configure(Window window)
     {
-        window.AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Hsis.ico"));
-        window.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+        string assembly = typeof(WindowTools).Assembly.GetName().Name!;
+        window.Icon = BitmapFrame.Create(new Uri($"pack://application:,,,/{assembly};component/Hsis.ico"));
+        window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        window.WindowStyle = WindowStyle.None;
+        WindowChrome.SetWindowChrome(window, new WindowChrome
+        {
+            CaptionHeight = 32,
+            ResizeBorderThickness = new Thickness(6),
+            GlassFrameThickness = new Thickness(0),
+            UseAeroCaptionButtons = false
+        });
+        UIElement content = (UIElement)window.Content;
+        window.Content = null;
+        Grid frame = new();
+        frame.RowDefinitions.Add(new RowDefinition { Height = new GridLength(32) });
+        frame.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        frame.Children.Add(new TitleBar());
+        Grid.SetRow(content, 1);
+        frame.Children.Add(content);
+        window.Content = frame;
+        window.StateChanged += (_, _) => frame.Margin = window.WindowState == WindowState.Maximized ? new Thickness(8) : new Thickness(0);
     }
-    public static async Task<string?> PickFileAsync(Window window, params string[] extensions)
+    public static Task<string?> PickFileAsync(Window window, params string[] extensions)
     {
-        FileOpenPicker picker = new();
-        foreach (string extension in extensions) picker.FileTypeFilter.Add(extension);
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
-        Windows.Storage.StorageFile? file = await picker.PickSingleFileAsync();
-        return file?.Path;
+        OpenFileDialog picker = new() { Filter = "対応ファイル|" + string.Join(";", extensions.Select(extension => "*" + extension)) };
+        return Task.FromResult(picker.ShowDialog(window) == true ? picker.FileName : null);
     }
-    public static async Task<string?> PickFolderAsync(Window window)
+    public static Task<string?> PickFolderAsync(Window window)
     {
-        FolderPicker picker = new();
-        picker.FileTypeFilter.Add("*");
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
-        Windows.Storage.StorageFolder? folder = await picker.PickSingleFolderAsync();
-        return folder?.Path;
+        OpenFolderDialog picker = new();
+        return Task.FromResult(picker.ShowDialog(window) == true ? picker.FolderName : null);
     }
 }

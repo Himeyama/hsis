@@ -3,15 +3,15 @@
 
 <img width="600" src="https://github.com/user-attachments/assets/52bdb38a-db7e-49c1-9d93-8ef7ab0123f0" />
 
-現在のバージョン: **0.4.4**。運用ルールは `AGENTS.md`、変更履歴は `CHANGELOG.md` を参照してください。
+現在のバージョン: **0.9.0**。運用ルールは `AGENTS.md`、変更履歴は `CHANGELOG.md` を参照してください。
 
 `WriteUninstaller` がない定義にも `Uninstall.exe` を自動生成します。削除定義がない場合、配置ファイルとショートカットを削除し、ユーザーが追加したファイルは残します。レジストリなどの削除は `Section Uninstall` で指定してください。取得した対象アプリのアイコンは `.hsis/Application.ico` に配置し、アプリのショートカットから参照します。
 
-Windows アプリ用インストーラーの作成ツールです。HSIS 自身が `.nsi` 定義を解析し、ファイルを圧縮して WinUI 3 のセットアップを生成します。インストール処理も HSIS が実行します。
+Windows アプリ用インストーラーの作成ツールです。HSIS 自身が `.nsi` 定義を解析し、ファイルを圧縮して WPF 標準 Fluent テーマのセットアップを生成します。インストール処理も HSIS が実行します。
 
 ## 起動
 
-生成・実行の対象は Windows 11、x64 です。標準の `tar.exe` が 7z／LZMA2 の作成・展開に対応している環境が必要です。生成には .NET 8 以降の SDK と、Visual Studio 2022 Build Tools の「C++ によるデスクトップ開発」が必要です。生成時には NuGet に接続します。NSIS や 7-Zip のインストールは不要です。
+生成・実行の対象は Windows 11、x64 です。標準の `tar.exe` が 7z／LZMA2 の作成・展開に対応している環境が必要です。生成には .NET 9 SDK が必要です。C++ ビルドツールは不要です。生成時には NuGet に接続します。画面は参考サンプルと同じ .NET 9 の WPF 標準 Fluent テーマ（`ThemeMode="System"`）を使用します。NSIS や 7-Zip のインストールは不要です。
 
 ```powershell
 # 毎回ビルドして Studio を起動
@@ -126,9 +126,9 @@ Releases から取得した `HSIS-バージョン-win-x64-Setup.exe` を起動�
 ./build-installer.ps1
 ```
 
-Studio と CLI を発行し、その CLI が `installer/HSIS.nsi` を処理して **HSIS で HSIS 自身のインストーラーを生成**します。完成した EXE と SHA-256 は `artifacts/distribution/` に保存します。インストール後の Studio / CLI で別のインストーラーを生成する場合も、.NET SDK、C++ ビルドツール、対応する Windows 標準 `tar.exe`、NuGet 接続が必要です。
+Studio と CLI を発行し、その CLI が `installer/HSIS.nsi` を処理して **HSIS で HSIS 自身のインストーラーを生成**します。完成した EXE と SHA-256 は `artifacts/distribution/` に保存します。インストール後の Studio / CLI で別のインストーラーを生成する場合も、.NET 9 SDK、対応する Windows 標準 `tar.exe`、NuGet 接続が必要です。
 
-標準 `tar.exe` が LZMA2 に対応しない環境では、`$env:HSIS_7ZIP_PATH = 'C:\Program Files\7-Zip\7z.exe'` を設定すると、圧縮と展開に 7-Zip を使用します。このリポジトリの workflow もこの設定でビルドします。生成したセットアップのネイティブ起動処理は Windows 標準 `tar.exe` を使用するため、配布対象には LZMA2 の展開に対応した Windows が必要です。
+標準 `tar.exe` が LZMA2 に対応しない環境では、`$env:HSIS_7ZIP_PATH = 'C:\Program Files\7-Zip\7z.exe'` を設定すると、圧縮と展開に 7-Zip を使用します。このリポジトリの workflow もこの設定でビルドします。生成したセットアップのアプリ本体の展開処理は Windows 標準 `tar.exe` を使用するため、配布対象には LZMA2 の展開に対応した Windows が必要です。
 
 ## GitHub Actions で使用する
 
@@ -170,7 +170,9 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: |
+            8.0.x
+            9.0.x
       - name: Validate application version
         env:
           APP_VERSION: ${{ inputs.version }}
@@ -237,15 +239,15 @@ v0.4.4 では CLI の `Template` に `Hsis.ico` が含まれないため、同�
 
 出力先の `Setup-日時-識別子` フォルダーに実行ファイルを生成します。ファイル名は定義の `OutFile` から取得します。`OutFile` のディレクトリ部分は使わず、出力先は GUI / CLI の指定に従います。ランタイムを同梱するため、インストール先では SDK は不要です。付随ファイルがある場合は出力フォルダーごと配布してください。
 
-起動直後に「⠋ セットアップを準備しています…」と表示し、「必要なファイルを展開しています。画面が開くまで、そのままお待ちください」と案内します。白背景・カスタムタイトルバー・Noto Sans JP（見出し26px／説明20px相当）で表示し、Windows の表示倍率にも追従します。フォントは必要な文字だけを EXE に同梱し、PC 全体へのフォント追加は行いません。この準備画面自体は .NET／WinUI を必要としません。割合を示すバーは使わず、点字スピナーを動かして処理中であることを示し、通常画面の読み込みが完了するまで残します。インストール開始後のアプリ本体の展開中も待ち時間の案内と動く進行表示を出します。残り時間・割合が不明な段階では、推測の数値は表示しません。
+Studio、セットアップ、アンインストーラーは WPF の標準 Fluent テーマを使用し、Windows のライト／ダーク設定に追従します。WinUI / Windows App SDK は使用しません。
 
-生成するセットアップとアンインストーラーの EXE には、インストール対象アプリのアイコンを設定します。アイコンを取得できない場合は、HSIS のアイコンを使用します。
+セットアップは .NET を同梱した単一 EXE として発行し、以前のネイティブ準備画面と、起動前に共通ランタイム全体を 7z から展開する処理を廃止しました。起動するとセットアップ画面を直接開きます。ただし単一 EXE の仕様上、初回起動時などには .NET が必要なネイティブ DLL を内部キャッシュへ展開します。初期ディスク書き込みが完全になくなるわけではありません。
 
-アプリ本体と共通ランタイムは、7z／LZMA2・圧縮レベル9で圧縮し、EXE の末尾に格納します。アプリ本体にセットアップ用ランタイムと内容が完全に同じファイルがある場合、SHA-256 で照合して共通ランタイムに一度だけ格納します。インストール開始時に、展開済みの共通ランタイムから必要なファイルを検証してコピーします。異なるバージョンやアプリ固有のファイルは個別に保持し、インストール開始まで展開しません。共通化を使用する新形式 `HSIS7Z02` に加え、従来の `HSIS7Z01` / ZIP 形式も読み込めます。
+インストール対象のファイルは 7z／LZMA2・圧縮レベル9で圧縮し、セットアップ EXE 末尾に格納します。インストール開始までは展開しません。配置中には進行表示と待ち時間の案内を表示します。
 
-セットアップとアンインストーラーは同じ画面・ランタイムを使います。アンインストーラーは配置時にその共通データから生成し、アプリ本体を含めません。インストール先のアプリには必要なファイルをすべて配置するため、インストール後はセットアップの一時フォルダーに依存しません。
+アンインストーラーは同じ WPF 画面を別の .NET 同梱単一 EXE として生成します。削除用定義だけを持ち、インストール対象のファイルは含めません。起動時に自分自身を一時フォルダーへコピーし、元のプロセスの終了を待ってから削除画面を開くため、インストール先の EXE も削除できます。`/S` による無人削除も利用できます。一時コピーと .NET のキャッシュは残る場合があります。
 
-アンインストール時は一時フォルダーの起動ヘルパーから共通ランタイムを展開して削除画面を開くため、インストール先の EXE 自身も削除できます。画面終了後は大きな一時ランタイムを削除します。実行中だった小さな起動ヘルパーは Windows の一時フォルダーに残る場合があります。旧 ZIP 形式のパッケージの読み取りも維持しています。
+セットアップとアンインストーラーには対象アプリのアイコンを設定し、取得できない場合は HSIS のアイコンを使用します。旧 ZIP、`HSIS7Z01` / `HSIS7Z02`、ネイティブ起動形式の読み取りは維持します。新規生成では起動前の共有ランタイム展開・共通ファイルへの重複排除を使用しません。
 
 Studio / CLI の `Template` フォルダーは生成時に必要です。実行ファイルと一緒に保持してください。
 
@@ -284,3 +286,19 @@ dotnet run --project tests/Hsis.Checks -- .
 ```
 
 解析、インクルード、条件分岐、再帰取り込み、名前変更、圧縮・配置、日本語の保存先、未対応命令と範囲外パスの拒否を確認します。配置先は `artifacts/native-check` 内です。
+
+WPF 画面の検証（保存先チェック・利用規約の同意・削除モード、描画画像は `artifacts/wpf-checks`）:
+
+```powershell
+dotnet build tests/Hsis.WpfChecks -c Release -m:1
+./tests/Hsis.WpfChecks/bin/Release/net9.0-windows/win-x64/Hsis.WpfChecks.exe
+```
+
+単一 EXE の初回起動確認:
+
+```powershell
+./tests/Check-SetupStartup.ps1 -SetupPath <生成したSetup.exe> -ExpectedTitle 'Hello App セットアップ' -ColdStart
+./tests/Check-UninstallerStartup.ps1 -UninstallerPath <生成したUninstall.exe>
+```
+
+`Check-PreparedStartup.ps1` は旧ネイティブ形式の準備画面を確認する互換検証専用です。
