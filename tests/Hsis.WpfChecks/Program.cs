@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -18,6 +19,11 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (Environment.GetEnvironmentVariable("HSIS_LAUNCH_PROBE") is string marker)
+        {
+            File.WriteAllText(marker, Environment.CurrentDirectory);
+            return;
+        }
         _headless = args.Contains("--ci");
         Hsis.App.App application = new();
         application.InitializeComponent();
@@ -25,6 +31,12 @@ internal static class Program
         application.ThemeMode = args.Contains("--dark") ? ThemeMode.Dark : ThemeMode.Light;
 #pragma warning restore WPF0001
         application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        if (args.Contains("--check-launch"))
+        {
+            CheckLaunch();
+            application.Shutdown();
+            return;
+        }
         if (args.Contains("--check-dialog-surface"))
         {
             InstallerWindow probe = new(new PackageDefinition { Name = "Hello App" });
@@ -44,6 +56,7 @@ internal static class Program
             application.Shutdown();
             return;
         }
+        CheckLaunch();
         string output = Path.GetFullPath("artifacts/wpf-checks/" + (args.Contains("--dark") ? "dark" : "light"));
         Directory.CreateDirectory(output);
         BuilderWindow studio = new();
@@ -112,6 +125,60 @@ internal static class Program
         window.ApplyTemplate();
         window.Measure(new Size(window.Width, window.Height));
         window.Arrange(new Rect(0, 0, window.Width, window.Height));
+    }
+
+    private static void CheckLaunch()
+    {
+        string marker = Path.Combine(Path.GetTempPath(), "hsis-launch-" + Guid.NewGuid().ToString("N"));
+        string executable = Environment.ProcessPath!;
+        string directory = Path.GetDirectoryName(executable)!;
+        string installDirectory = Path.GetDirectoryName(directory)!;
+        Environment.SetEnvironmentVariable("HSIS_LAUNCH_PROBE", marker);
+        try
+        {
+            foreach (bool finishButton in new[] { true, false })
+            {
+                foreach (bool launch in new[] { false, true })
+                {
+                    InstallerWindow window = new(new PackageDefinition { Name = "Launch probe", LaunchExecutable = Path.GetRelativePath(installDirectory, executable) });
+                    PrepareWindow(window);
+                    typeof(InstallerWindow).GetField("_page", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(window, 4);
+                    typeof(InstallerWindow).GetField("_installedDirectory", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(window, installDirectory);
+                    typeof(InstallerWindow).GetMethod("ShowPage", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, null);
+                    ((CheckBox)window.FindName("LaunchApp")).IsChecked = launch;
+                    if (finishButton) ((Button)window.FindName("NextButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    else window.Close();
+                    bool started = SpinWait.SpinUntil(() => File.Exists(marker), launch ? 10000 : 1000);
+                    Check(started == launch, $"完了後の起動: finish={finishButton}, checked={launch}");
+                    if (started)
+                    {
+                        Check(SpinWait.SpinUntil(() =>
+                        {
+                            try { return File.ReadAllText(marker).Equals(directory, StringComparison.OrdinalIgnoreCase); }
+                            catch (IOException) { return false; }
+                        }, 5000), "起動したアプリのフォルダーを作業フォルダーにする");
+                        File.Delete(marker);
+                    }
+                }
+            }
+            InstallerWindow failure = new(new PackageDefinition { Name = "Launch failure", LaunchExecutable = "missing-" + Guid.NewGuid().ToString("N") + ".exe" });
+            PrepareWindow(failure);
+            typeof(InstallerWindow).GetField("_page", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(failure, 4);
+            typeof(InstallerWindow).GetField("_installedDirectory", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(failure, installDirectory);
+            typeof(InstallerWindow).GetMethod("ShowPage", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(failure, null);
+            bool closed = false;
+            failure.Closed += (_, _) => closed = true;
+            failure.Close();
+            Check(!closed && ((Notice)failure.FindName("ErrorBar")).IsOpen, "起動失敗時は完了画面にエラーを表示する");
+            ((CheckBox)failure.FindName("LaunchApp")).IsChecked = false;
+            failure.Close();
+            Check(closed, "起動チェックを外すとエラー後も終了できる");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HSIS_LAUNCH_PROBE", null);
+            File.Delete(marker);
+        }
     }
 
     private static void Capture(Window window, string path)

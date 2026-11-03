@@ -41,7 +41,13 @@ public sealed partial class InstallerWindow : Window
         }
         Closing += (_, e) =>
         {
-            if (_allowClose || _page == 4) return;
+            if (_allowClose) return;
+            if (_page == 4)
+            {
+                try { LaunchInstalledApplication(); }
+                catch (Exception ex) { e.Cancel = true; ShowError(ex.Message); }
+                return;
+            }
             e.Cancel = true;
             if (!_installing) ConfirmClose();
         };
@@ -126,18 +132,7 @@ public sealed partial class InstallerWindow : Window
         ErrorBar.IsOpen = false;
         if (_page == 4)
         {
-            try
-            {
-                if (LaunchApp.Visibility == Visibility.Visible && LaunchApp.IsChecked == true)
-                {
-                    string executable = Path.GetFullPath(Path.Combine(_installedDirectory, _definition.LaunchExecutable));
-                    string root = Path.TrimEndingDirectorySeparator(_installedDirectory) + Path.DirectorySeparatorChar;
-                    if (!executable.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("起動ファイルはインストール先の中に指定してください。");
-                    Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true, WorkingDirectory = _installedDirectory });
-                }
-                Close();
-            }
-            catch (Exception ex) { ShowError(ex.Message); }
+            Close();
             return;
         }
         if (_page == 2) { await InstallAsync(); return; }
@@ -174,4 +169,17 @@ public sealed partial class InstallerWindow : Window
         }
     }
     private void ShowError(string message) { ErrorBar.Message = message; ErrorBar.IsOpen = true; }
+
+    private void LaunchInstalledApplication()
+    {
+        if (_uninstallDirectory is not null || LaunchApp.Visibility != Visibility.Visible || LaunchApp.IsChecked != true) return;
+        string executable = Path.GetFullPath(Path.Combine(_installedDirectory, _definition.LaunchExecutable));
+        string root = Path.TrimEndingDirectorySeparator(_installedDirectory) + Path.DirectorySeparatorChar;
+        if (!executable.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("起動ファイルはインストール先の中に指定してください。");
+        using Process? process = Process.Start(new ProcessStartInfo(executable)
+        {
+            UseShellExecute = true,
+            WorkingDirectory = Path.GetDirectoryName(executable)!
+        });
+    }
 }
