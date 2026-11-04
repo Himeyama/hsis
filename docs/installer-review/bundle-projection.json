@@ -1,0 +1,18 @@
+{
+  "OriginalSetupBytes": 107905630,
+  "ExistingBundleBytes": 64141239,
+  "ExistingPayloadBytes": 43764359,
+  "MatchedRawFiles": 377,
+  "MatchedRawBytes": 126857052,
+  "ResidualRawFiles": 59,
+  "ResidualRawBytes": 17878079,
+  "ResidualArchiveBytes": 5131854,
+  "ProjectedBundlePlusResidualArchiveBytes": 69273093,
+  "AdditionalManifestAndNewImplementationBytes": "not measured",
+  "Compressor": "7-Zip 24.08 x64 / 7z LZMA2 -mx=9",
+  "SourceSpecification": [
+    "https://raw.githubusercontent.com/dotnet/runtime/main/src/installer/managed/Microsoft.NET.HostModel/Bundle/Bundler.cs",
+    "https://raw.githubusercontent.com/dotnet/runtime/main/src/installer/managed/Microsoft.NET.HostModel/Bundle/Manifest.cs",
+    "https://raw.githubusercontent.com/dotnet/runtime/main/src/installer/managed/Microsoft.NET.HostModel/Bundle/FileEntry.cs"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "artifact": "artifacts/distribution/HSIS-0.10.5-win-x64-Setup.exe",
+  "fileCount": 437,
+  "decoderManaged": "SharpCompress 0.49.1 through current Hsis.Core SevenZip.ExtractAsync",
+  "decoderNative": "7-Zip 24.08 x64",
+  "archives": [
+    { "level": 9, "bytes": 43716875, "dictionaryMiB": 64, "solidBlocks": 1, "source": "archive copied directly from existing installer payload" },
+    { "level": 7, "bytes": 44324097, "dictionaryMiB": 32, "solidBlocks": 1, "compressionSeconds": 24.5454133 },
+    { "level": 5, "bytes": 44900445, "dictionaryMiB": 16, "solidBlocks": 1, "compressionSeconds": 10.5318072 }
+  ],
+  "managedExtractSeconds": {
+    "level9AllRuns": [19.3470433, 16.8604668, 16.2906003, 16.5401883],
+    "level9FinalRunAfterOtherCompressionCompleted": 16.5401883,
+    "level7SingleRun": 16.7850194,
+    "level5SingleRun": 16.8469724
+  },
+  "nativeExtractSeconds": {
+    "level9": [2.1724467, 2.2121596],
+    "level7SingleRun": 2.1064042,
+    "level5SingleRun": 1.4064742
+  },
+  "scope": [
+    "Fresh output directory for every extraction; archive and filesystem cache were warm. These are not cold-start or end-to-end install measurements.",
+    "Managed stopwatch includes SevenZip.ExtractAsync and managed decoder first-call/JIT work occurring inside this timed call. It excludes dotnet process startup, installer UI startup, payload archive copy from EXE, installation final copy, shortcuts, registry operations and uninstaller generation.",
+    "Native stopwatch includes 7z process launch and complete extraction to fresh output; native command extracts all 437 files in the same level9 archive.",
+    "The level9 archive was not recompressed. The level5 and level7 archives contain exactly the extracted source files and were compressed with 7z a -t7z -m0=lzma2 -mx=N using defaults otherwise.",
+    "Some exploratory managed runs overlapped unrelated local compression. The final managed level9 run began after all reported other-agent compression finished.",
+    "Level5 and level7 are single measurements and should not be used to claim a precise decoding-speed difference. Compression times are exploratory and may overlap other processes.",
+    "The prepare run (19.3470433 seconds) produced the reference source directory. The nine additional outputs (five managed and four native) were SHA256 checked against that reference; see hash-checks.json. There were ten timed extraction runs in total."
+  ]
+}
