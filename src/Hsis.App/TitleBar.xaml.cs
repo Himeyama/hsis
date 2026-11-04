@@ -24,7 +24,7 @@ public partial class TitleBar : UserControl
     }
 
     private void Window_StateChanged(object? sender, EventArgs e) => UpdateMaximizeIcon();
-    private void UpdateMaximizeIcon() => MaximizeButton.Content = _window?.WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+    private void UpdateMaximizeIcon() => MaximizeButton.Content = _window?.WindowState == WindowState.Maximized ? "M 0,3 L 7,3 7,10 0,10 Z M 3,3 L 3,0 10,0 10,7 7,7" : "M 0,0 L 10,0 10,10 0,10 Z";
     private void Minimize_Click(object sender, RoutedEventArgs e)
     {
         if (_window is not null) SystemCommands.MinimizeWindow(_window);

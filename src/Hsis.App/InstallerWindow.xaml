@@ -17,7 +17,7 @@
         </Grid.ColumnDefinitions>
         <Grid Width="44" Height="44">
           <Border x:Name="FallbackIcon" CornerRadius="12" Background="{DynamicResource AccentFillColorDefaultBrush}">
-            <TextBlock FontFamily="Segoe MDL2 Assets" Text="" Foreground="White" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <Path Width="22" Height="22" Stretch="Uniform" Stroke="White" StrokeThickness="1.5" Data="M 2,7 L 11,2 20,7 20,18 11,23 2,18 Z M 2,7 L 11,12 20,7 M 11,12 L 11,23" />
           </Border>
           <Image x:Name="ProductIcon" Stretch="Uniform" Visibility="Collapsed" AutomationProperties.Name="アプリのアイコン" />
         </Grid>
@@ -69,7 +69,7 @@
           <TextBlock x:Name="ProgressStatus" Text="ファイルを配置して設定を適用しています…" TextWrapping="Wrap" Opacity="0.7" />
         </StackPanel>
         <StackPanel x:Name="CompletePage" Visibility="Collapsed" VerticalAlignment="Center">
-          <TextBlock FontFamily="Segoe MDL2 Assets" Text="" FontSize="40" Foreground="{DynamicResource SystemFillColorSuccessBrush}" HorizontalAlignment="Left" Margin="0,0,0,20" />
+          <Path Width="40" Height="40" Stretch="Uniform" Stroke="{DynamicResource SystemFillColorSuccessBrush}" StrokeThickness="2" HorizontalAlignment="Left" Margin="0,0,0,20" Data="M 20,1 A 19,19 0 1 1 19.99,1 M 10,20 L 17,27 30,13" />
           <TextBlock x:Name="CompleteTitle" Text="準備ができました" Style="{StaticResource TitleLargeTextBlockStyle}" Margin="0,0,0,20" TextWrapping="Wrap" />
           <TextBlock x:Name="CompleteText" TextWrapping="Wrap" Margin="0,0,0,20" />
           <CheckBox x:Name="LaunchApp" Content="アプリを起動する" IsChecked="True" />

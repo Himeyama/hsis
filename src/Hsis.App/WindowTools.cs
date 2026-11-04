@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
+using System.Windows.Media;
+using System.Runtime.InteropServices;
 using System.Windows.Shell;
 using Microsoft.Win32;
 
@@ -10,6 +12,18 @@ internal static class WindowTools
 {
     public static void Configure(Window window)
     {
+        if (NativeLibrary.TryLoad("ntdll.dll", out IntPtr library))
+        {
+            try
+            {
+                if (NativeLibrary.TryGetExport(library, "wine_get_version", out _) &&
+                    Fonts.SystemFontFamilies.Any(family => string.Equals(family.Source, "Noto Sans JP", StringComparison.OrdinalIgnoreCase)))
+                {
+                    window.FontFamily = new FontFamily("Noto Sans JP");
+                }
+            }
+            finally { NativeLibrary.Free(library); }
+        }
         string assembly = typeof(WindowTools).Assembly.GetName().Name!;
         window.Icon = BitmapFrame.Create(new Uri($"pack://application:,,,/{assembly};component/Hsis.ico"));
         window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
