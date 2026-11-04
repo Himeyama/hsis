@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media.Imaging;
 using System.Windows.Media;
 using System.Runtime.InteropServices;
@@ -63,8 +64,20 @@ internal static class WindowTools
                 {
                     if (sender is Control control && control.ReadLocalValue(Control.FontFamilyProperty) == DependencyProperty.UnsetValue)
                         control.SetCurrentValue(Control.FontFamilyProperty, font);
-                    else if (sender is TextBlock text && text.ReadLocalValue(TextBlock.FontFamilyProperty) == DependencyProperty.UnsetValue)
-                        text.SetCurrentValue(TextBlock.FontFamilyProperty, font);
+                    if (sender is ButtonBase button && button.FontWeight < FontWeights.Medium)
+                        button.SetCurrentValue(Control.FontWeightProperty, FontWeights.Medium);
+                    if (sender is TextBlock text)
+                    {
+                        bool insideButton = false;
+                        for (DependencyObject? parent = VisualTreeHelper.GetParent(text); parent is not null; parent = VisualTreeHelper.GetParent(parent))
+                        {
+                            if (parent is ButtonBase) { insideButton = true; break; }
+                        }
+                        if (insideButton || text.ReadLocalValue(TextBlock.FontFamilyProperty) == DependencyProperty.UnsetValue)
+                            text.SetCurrentValue(TextBlock.FontFamilyProperty, font);
+                        if (insideButton && text.FontWeight < FontWeights.Medium)
+                            text.SetCurrentValue(TextBlock.FontWeightProperty, FontWeights.Medium);
+                    }
                 }));
         }
         finally { NativeLibrary.Free(library); }
