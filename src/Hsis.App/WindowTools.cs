@@ -11,6 +11,41 @@ namespace Hsis.App;
 internal static class WindowTools
 {
     private static bool _fontHandlerRegistered;
+    private static FontFamily? _wineFont;
+
+    private static FontFamily? FindWineFont()
+    {
+        string fontDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Fonts");
+        string regular = Path.Combine(fontDirectory, "NotoSansJP-Regular.otf");
+        string bold = Path.Combine(fontDirectory, "NotoSansJP-Bold.otf");
+        if (File.Exists(regular))
+        {
+            string isolatedDirectory = Path.Combine(Path.GetTempPath(), "Hsis", "Fonts", Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(isolatedDirectory);
+                File.Copy(regular, Path.Combine(isolatedDirectory, Path.GetFileName(regular)));
+                if (File.Exists(bold)) File.Copy(bold, Path.Combine(isolatedDirectory, Path.GetFileName(bold)));
+                Uri location = new(isolatedDirectory + Path.DirectorySeparatorChar, UriKind.Absolute);
+                FontFamily? staticFont = Fonts.GetFontFamilies(location).FirstOrDefault(family =>
+                    family.FamilyNames.Values.Any(name => name.Contains("Noto Sans", StringComparison.OrdinalIgnoreCase)));
+                AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+                {
+                    try { Directory.Delete(isolatedDirectory, true); }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                };
+                if (staticFont is not null) return staticFont;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+            {
+                // Fall back to the installed font if the isolated copy cannot be loaded.
+            }
+        }
+        return Fonts.SystemFontFamilies.FirstOrDefault(family =>
+            string.Equals(family.Source, "Noto Sans JP", StringComparison.OrdinalIgnoreCase) ||
+            family.FamilyNames.Values.Any(name => string.Equals(name, "Noto Sans JP", StringComparison.OrdinalIgnoreCase)));
+    }
 
     private static void ApplyWineFont(Window window)
     {
@@ -18,9 +53,7 @@ internal static class WindowTools
         try
         {
             if (!NativeLibrary.TryGetExport(library, "wine_get_version", out _)) return;
-            FontFamily? font = Fonts.SystemFontFamilies.FirstOrDefault(family =>
-                string.Equals(family.Source, "Noto Sans JP", StringComparison.OrdinalIgnoreCase) ||
-                family.FamilyNames.Values.Any(name => string.Equals(name, "Noto Sans JP", StringComparison.OrdinalIgnoreCase)));
+            FontFamily? font = _wineFont ??= FindWineFont();
             if (font is null) return;
             window.FontFamily = font;
             if (_fontHandlerRegistered) return;
