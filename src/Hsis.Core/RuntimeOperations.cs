@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
 
@@ -104,22 +105,18 @@ public static class RuntimeOperations
         {
             string shortcut = ResolvePath(args[0], installDirectory);
             Directory.CreateDirectory(Path.GetDirectoryName(shortcut)!);
-            Type shellType = Type.GetTypeFromProgID("WScript.Shell") ?? throw new InvalidOperationException("ショートカットを作成できません。");
+            Type shellType = Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046"), true)!;
             object shell = Activator.CreateInstance(shellType)!;
-            object? link = null;
             try
             {
-                dynamic dynamicShell = shell;
-                link = dynamicShell.CreateShortcut(shortcut);
-                dynamic dynamicLink = link;
-                dynamicLink.TargetPath = ResolvePath(args[1], installDirectory);
-                dynamicLink.IconLocation = args.Length > 2
-                    ? ResolvePath(args[2], installDirectory) + ",0"
-                    : ResolvePath(args[1], installDirectory) + ",0";
-                dynamicLink.WorkingDirectory = Path.GetDirectoryName(dynamicLink.TargetPath);
-                dynamicLink.Save();
+                IShellLink link = (IShellLink)shell;
+                string targetPath = ResolvePath(args[1], installDirectory);
+                link.SetPath(targetPath);
+                link.SetIconLocation(args.Length > 2 ? ResolvePath(args[2], installDirectory) : targetPath, 0);
+                link.SetWorkingDirectory(Path.GetDirectoryName(targetPath)!);
+                ((IPersistFile)shell).Save(shortcut, true);
             }
-            finally { if (link is not null) Marshal.FinalReleaseComObject(link); Marshal.FinalReleaseComObject(shell); }
+            finally { Marshal.FinalReleaseComObject(shell); }
             return;
         }
         RegistryKey root = args[0] switch { "HKCU" => Registry.CurrentUser, "HKLM" => Registry.LocalMachine, _ => throw new InvalidDataException("不明なレジストリルートです。") };
@@ -128,6 +125,29 @@ public static class RuntimeOperations
         using RegistryKey key = root.CreateSubKey(args[1]);
         if (operation.Command == "writeregdword") key.SetValue(args[2], unchecked((int)uint.Parse(args[3])), RegistryValueKind.DWord);
         else key.SetValue(args[2], ExpandValue(args[3], installDirectory), RegistryValueKind.String);
+    }
+
+    [ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellLink
+    {
+        void GetPath(IntPtr path, int size, IntPtr findData, uint flags);
+        void GetIDList(out IntPtr list);
+        void SetIDList(IntPtr list);
+        void GetDescription(IntPtr description, int size);
+        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string description);
+        void GetWorkingDirectory(IntPtr directory, int size);
+        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string directory);
+        void GetArguments(IntPtr arguments, int size);
+        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string arguments);
+        void GetHotkey(out short hotkey);
+        void SetHotkey(short hotkey);
+        void GetShowCmd(out int command);
+        void SetShowCmd(int command);
+        void GetIconLocation(IntPtr path, int size, out int index);
+        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string path, int index);
+        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string path, uint reserved);
+        void Resolve(IntPtr window, uint flags);
+        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string path);
     }
 
     private static string ExpandValue(string value, string directory) => value.Replace("$INSTDIR", directory, StringComparison.OrdinalIgnoreCase)

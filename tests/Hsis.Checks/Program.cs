@@ -458,6 +458,12 @@ if (OperatingSystem.IsWindowsVersionAtLeast(6, 1))
         dynamic link = savedShortcut;
         string location = link.IconLocation;
         Check(location == Path.Combine(shortcutRoot, @".hsis\Application.ico") + ",0", "保存したショートカットは同梱アプリアイコンを参照する");
+        ScriptOperation shortcutOperation = shortcutPlan.Install.First(operation => operation.Command == "createshortcut");
+        string expectedTarget = RuntimeOperations.ResolvePath(shortcutOperation.Arguments[1], shortcutRoot);
+        string savedTarget = link.TargetPath;
+        string savedWorkingDirectory = link.WorkingDirectory;
+        Check(savedTarget.Equals(expectedTarget, StringComparison.OrdinalIgnoreCase), "ショートカットの起動先を保存する");
+        Check(savedWorkingDirectory.Equals(Path.GetDirectoryName(expectedTarget), StringComparison.OrdinalIgnoreCase), "ショートカットの作業フォルダーを保存する");
         using System.Drawing.Icon installedIcon = new(Path.Combine(shortcutRoot, @".hsis\Application.ico"), 256, 256);
         Check(installedIcon.Width == 256, "ショートカット用 ICO を Windows が読み取れる");
     }
