@@ -10,6 +10,27 @@
     <Style x:Key="TitleTextBlockStyle" TargetType="TextBlock"><Setter Property="FontSize" Value="28"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
     <Style x:Key="TitleLargeTextBlockStyle" TargetType="TextBlock"><Setter Property="FontSize" Value="32"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
     <Style x:Key="CaptionTextBlockStyle" TargetType="TextBlock"><Setter Property="FontSize" Value="12"/></Style>
+    <!-- Wine may not provide the Fluent icon font. Draw the checkbox mark as geometry instead. -->
+    <Style x:Key="WineCheckBoxStyle" TargetType="CheckBox">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="#8A8A8A"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+        <Grid Background="Transparent">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <Border x:Name="Box" Width="20" Height="20" CornerRadius="4" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"/>
+          <Path x:Name="Mark" Data="M 4,10 L 8,14 L 16,6" Stroke="White" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Visibility="Collapsed"/>
+          <ContentPresenter Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True"/>
+        </Grid>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="Background" Value="#0067C0"/><Setter TargetName="Box" Property="BorderBrush" Value="#0067C0"/><Setter TargetName="Mark" Property="Visibility" Value="Visible"/></Trigger>
+          <Trigger Property="IsChecked" Value="{x:Null}"><Setter TargetName="Box" Property="Background" Value="#0067C0"/><Setter TargetName="Box" Property="BorderBrush" Value="#0067C0"/><Setter TargetName="Mark" Property="Data" Value="M 5,10 L 15,10"/><Setter TargetName="Mark" Property="Visibility" Value="Visible"/></Trigger>
+          <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="#60A6DF"/></Trigger>
+          <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
     <Style TargetType="local:Notice">
       <Setter Property="Visibility" Value="Collapsed"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="local:Notice">

@@ -31,6 +31,14 @@ internal static class Program
         application.ThemeMode = args.Contains("--dark") ? ThemeMode.Dark : ThemeMode.Light;
 #pragma warning restore WPF0001
         application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        CheckBox wineCheckBox = new() { Style = (Style)application.FindResource("WineCheckBoxStyle"), IsThreeState = true };
+        wineCheckBox.ApplyTemplate();
+        System.Windows.Shapes.Path wineMark = (System.Windows.Shapes.Path)wineCheckBox.Template.FindName("Mark", wineCheckBox);
+        Check(wineMark.Visibility == Visibility.Collapsed, "Wine 用チェックボックスの未選択状態");
+        wineCheckBox.IsChecked = true;
+        Check(wineMark.Visibility == Visibility.Visible && wineMark.Data.Bounds.Height > 0, "Wine 用チェックボックスはフォントを使わずチェックマークを表示する");
+        wineCheckBox.IsChecked = null;
+        Check(wineMark.Visibility == Visibility.Visible && wineMark.Data.Bounds.Height == 0, "Wine 用チェックボックスの中間状態");
         if (args.Contains("--check-launch"))
         {
             CheckLaunch();

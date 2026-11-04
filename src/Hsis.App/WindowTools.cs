@@ -55,14 +55,15 @@ internal static class WindowTools
         {
             if (!NativeLibrary.TryGetExport(library, "wine_get_version", out _)) return;
             FontFamily? font = _wineFont ??= FindWineFont();
-            if (font is null) return;
-            window.FontFamily = font;
+            if (font is not null) window.FontFamily = font;
             if (_fontHandlerRegistered) return;
             _fontHandlerRegistered = true;
             EventManager.RegisterClassHandler(typeof(FrameworkElement), FrameworkElement.LoadedEvent,
                 new RoutedEventHandler((sender, _) =>
                 {
-                    if (sender is Control control && control.ReadLocalValue(Control.FontFamilyProperty) == DependencyProperty.UnsetValue)
+                    if (sender is CheckBox checkBox && checkBox.ReadLocalValue(FrameworkElement.StyleProperty) == DependencyProperty.UnsetValue)
+                        checkBox.SetResourceReference(FrameworkElement.StyleProperty, "WineCheckBoxStyle");
+                    if (font is not null && sender is Control control && control.ReadLocalValue(Control.FontFamilyProperty) == DependencyProperty.UnsetValue)
                         control.SetCurrentValue(Control.FontFamilyProperty, font);
                     if (sender is ButtonBase button && button.FontWeight < FontWeights.Medium)
                         button.SetCurrentValue(Control.FontWeightProperty, FontWeights.Medium);
@@ -73,7 +74,7 @@ internal static class WindowTools
                         {
                             if (parent is ButtonBase) { insideButton = true; break; }
                         }
-                        if (insideButton || text.ReadLocalValue(TextBlock.FontFamilyProperty) == DependencyProperty.UnsetValue)
+                        if (font is not null && (insideButton || text.ReadLocalValue(TextBlock.FontFamilyProperty) == DependencyProperty.UnsetValue))
                             text.SetCurrentValue(TextBlock.FontFamilyProperty, font);
                         if (insideButton && text.FontWeight < FontWeights.Medium)
                             text.SetCurrentValue(TextBlock.FontWeightProperty, FontWeights.Medium);
